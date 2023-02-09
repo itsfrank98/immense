@@ -35,13 +35,13 @@ class Graph:
         :return:
         """
         assert self.feature_attribute_name
-        for id, data in self.nxgraph.nodes(data=True):
+        for node_id, data in self.nxgraph.nodes(data=True):
             if type == "random":
-                data[self.feature_attribute_name] = np.random.rand(1, len)
+                data[self.feature_attribute_name] = np.random.rand(len)
             elif type == "const":
                 data[self.feature_attribute_name] = np.array([1]*10)
             elif type == "row":
-                data[self.feature_attribute_name] = self.adj_matrix[id]
+                data[self.feature_attribute_name] = self.adj_matrix[int(node_id)]
 
     def instanciate_graph(self):
         self.sgraph = sg.StellarGraph.from_networkx(self.nxgraph, node_features=self.feature_attribute_name)
