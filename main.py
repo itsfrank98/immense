@@ -34,22 +34,22 @@ if __name__ == "__main__":
         w2v_model.train_w2v()
 
     # convert text to vector
-    list_dang_tweets_exist = exists('list_dang_tweets.pickle')
+    list_dang_tweets_exist = exists('textual_data/list_dang_tweets.pickle')
     if list_dang_tweets_exist:
-        with open('list_dang_tweets.pickle', 'rb') as handle:
+        with open('textual_data/list_dang_tweets.pickle', 'rb') as handle:
             list_dang_tweets = pickle.load(handle)
     else:
         list_dang_tweets = w2v_model.text_to_vec(list_dang_tweets)
-        with open('list_dang_tweets.pickle', 'wb') as handle:
+        with open('textual_data/list_dang_tweets.pickle', 'wb') as handle:
             pickle.dump(list_dang_tweets, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    list_safe_tweets_exist = exists('list_safe_tweets.pickle')
+    list_safe_tweets_exist = exists('textual_data/list_safe_tweets.pickle')
     if list_safe_tweets_exist:
-        with open('list_safe_tweets.pickle', 'rb') as handle:
+        with open('textual_data/list_safe_tweets.pickle', 'rb') as handle:
             list_safe_tweets = pickle.load(handle)
     else:
         list_safe_tweets = w2v_model.text_to_vec(list_safe_tweets)
-        with open('list_safe_tweets.pickle', 'wb') as handle:
+        with open('textual_data/list_safe_tweets.pickle', 'wb') as handle:
             pickle.dump(list_safe_tweets, handle, protocol=pickle.HIGHEST_PROTOCOL)
     ###############################
 
@@ -72,10 +72,10 @@ if __name__ == "__main__":
 
     #test set evaluation
     print('----W2V Counter dataset----')
-    df_counter = pd.read_csv('counter_dang.csv', sep=';',  encoding="latin-1")
-    list_counter_split_exist = exists('list_counter_split.pickle')
+    df_counter = pd.read_csv('textual_data/counter_dang.csv', sep=';', encoding="latin-1")
+    list_counter_split_exist = exists('textual_data/list_counter_split.pickle')
     if list_counter_split_exist:
-        with open('list_counter_split.pickle', 'rb') as handle:
+        with open('textual_data/list_counter_split.pickle', 'rb') as handle:
             X_test = pickle.load(handle)
     else:
             print('----Preprocessing Counter dataset----')
@@ -86,13 +86,13 @@ if __name__ == "__main__":
 
             print(list_counter)
 
-            with open('list_counter.pickle', 'wb') as handle:
+            with open('textual_data/list_counter.pickle', 'wb') as handle:
                 pickle.dump(list_counter, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
             #list_counter = tok.token_list(list_counter)
             print('----End Preprocessing Counter dataset----')
             X_test = w2v_model.text_to_vec(list_counter)
-            with open('list_counter_split.pickle', 'wb') as handle:
+            with open('textual_data/list_counter_split.pickle', 'wb') as handle:
                 pickle.dump(X_test, handle, protocol=pickle.HIGHEST_PROTOCOL)
     print('----End W2V Counter dataset----')
 
