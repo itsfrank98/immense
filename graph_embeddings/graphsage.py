@@ -13,14 +13,14 @@ from keras.losses import binary_crossentropy
 from keras.metrics import binary_accuracy
 from keras.models import save_model
 from keras.callbacks import ModelCheckpoint, EarlyStopping
+import pickle
 
 
 class GraphSAGEEmbedder(Graph):
-    def __init__(self, path_to_edges, adj_matrix, number_of_walks, walk_length, num_samples, layer_sizes, samples_per_hop: list, feature_attribute_name=None):
+    def __init__(self, path_to_edges, adj_matrix, number_of_walks, walk_length, num_samples, layer_sizes, feature_attribute_name=None):
         super().__init__(path_to_edges, adj_matrix, feature_attribute_name)
         self.number_of_walks = number_of_walks
         self.walk_length = walk_length
-        self.samples_per_hop = samples_per_hop
         self.num_samples = num_samples
         self.layer_sizes = layer_sizes
 
@@ -42,21 +42,22 @@ class GraphSAGEEmbedder(Graph):
         graphsage = GraphSAGE(layer_sizes=self.layer_sizes, generator=generator, bias=True, dropout=dropout, normalize="l2")     # encoder, produces embeddings
         return graphsage, train_gen
 
-    def learn_embeddings(self, graphsage, generator, epochs, mode, lr=1e-3):
+    def learn_embeddings(self, graphsage, generator, epochs, mode, t, lr=1e-3):
         x_inp, x_out = graphsage.in_out_tensors()
         #print(x_inp, x_out)
         # get the outputs of the encoder and performs link prediction to state if two nodes can be linked
         model_checkpoint_callback = ModelCheckpoint(
-            filepath='models/{}_{}/{epoch:02d}.hdf5'.format(mode, self.layer_sizes[-1]),
+            filepath='models/{}_{}_{}/'.format(mode, self.layer_sizes[-1], t),
             save_weights_only=False,
             monitor='loss',
             mode='min',
-            verbose=1,
+            verbose=0,
             save_best_only=True)
-        prediction = link_classification(output_dim=1, output_act="sigmoid", edge_embedding_method="ip")(x_out)
+        prediction = link_classification(output_dim=1, output_act="sigmoid", edge_embedding_method=t)(x_out)
         model = keras.Model(x_inp, prediction)
         model.compile(optimizer=Adam(lr), loss=binary_crossentropy, metrics=binary_accuracy)
-        model.fit(generator, epochs=epochs, verbose=1, workers=4, shuffle=True, callbacks=[model_checkpoint_callback, EarlyStopping(monitor='loss', patience=20)])
+        history = model.fit(generator, epochs=epochs, verbose=1, workers=4, shuffle=True, callbacks=[model_checkpoint_callback, EarlyStopping(monitor='loss', patience=20)])
+        return history
 
         '''x_inp_src = x_inp[0::2]
         x_out_src = x_out[0]
@@ -69,24 +70,29 @@ class GraphSAGEEmbedder(Graph):
 
 
 if __name__ == "__main__":
-    num_samples = [10, 5]
-    number_of_walks = 2
+    num_samples = [10, 5, 3]
+    number_of_walks = 3
     walk_length = 4
-    epochs = 1
-    layer_sizes = [128, 128]
-
-    g = GraphSAGEEmbedder("stuff/network.dat", "stuff/adj_net.csv", feature_attribute_name="attribute",
-                          number_of_walks=number_of_walks, walk_length=walk_length,
-                          samples_per_hop=[2, 3], num_samples=num_samples, layer_sizes=layer_sizes)
-    g.create_unweighted_graph()
-    g.instanciate_graph()
-    #print(g.sgraph.nodes()[1])
-    g.create_unweighted_graph()
-    g.add_features("row", 10)
-    g.instanciate_graph()
-    graphsage, generator = g.create_graphsage_model(batch_size=512)
-    g.learn_embeddings(graphsage=graphsage, generator=generator, epochs=epochs)
-
+    epochs = 100
+    d = {}
+    for mode in ['row']:    # , 'random'
+        for ls in [256]:    # , 64, 128
+            for t in ['ip']:    # , 'concat'
+                print((mode, ls, t))
+                layer_sizes = [ls, ls, ls]
+                g = GraphSAGEEmbedder("stuff/network.dat", "stuff/adj_net.csv", feature_attribute_name="attribute",
+                                      number_of_walks=number_of_walks, walk_length=walk_length, num_samples=num_samples,
+                                      layer_sizes=layer_sizes)
+                #print(g.sgraph.nodes()[1])
+                g.create_unweighted_graph()
+                g.add_features(mode, 100)
+                g.instanciate_graph()
+                graphsage, generator = g.create_graphsage_model(batch_size=512)
+                history = g.learn_embeddings(graphsage=graphsage, generator=generator, epochs=epochs, t=t, mode=mode)
+                d[mode+"_"+str(ls)+"_"+t] = (history.history['loss'][-1], history.history['binary_accuracy'][-1])
+                print((history.history['loss'][-1], history.history['binary_accuracy'][-1]))
+    with open("eval.pkl", "wb") as f:
+        pickle.dump(d, f)
 
 
 
