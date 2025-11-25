@@ -214,7 +214,7 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
     test_set = torch.zeros(len(posts), 7)
     posts_embs_dict = w2v_model.text_to_vec(posts)
     if consider_content:
-        posts_embs = torch.tensor(list(posts_embs_dict.values()), dtype=torch.float32)
+        posts_embs = torch.tensor(np.array(list(posts_embs_dict.values())), dtype=torch.float32)
         pred_safe = ae_safe.predict(posts_embs)
         pred_risky = ae_risky.predict(posts_embs)
         loss = MSELoss()
