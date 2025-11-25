@@ -42,13 +42,19 @@ def main_test():
     safe_ae = load_from_pickle(join(models_dir, "autoencodersafe_{}.pkl".format(word_emb_size)))
     mod_rel = mod_spat = None
 
-
-
-    """confs = [(True, False, False), (True, False, True), (True, True, False), (True, True, True), (False, False, True),
-             (False, True, False), (False, True, True)]
-    for conf in confs:
-        consider_content, consider_rel, consider_spat = conf[0], conf[1], conf[2]"""
     mlp_name = "mlp"
+
+    """confs = [(True, False, False), (True, False, True), (True, True, False), (True, True, True), (False, False, True), (False, True, False), (False, True, True)]
+
+    for conf in confs:
+        consider_content, consider_rel, consider_spat = conf[0], conf[1], conf[2]
+        for loss in ["weighted", "focal"]:
+            word_emb_size = 768
+            for conf_ne in [(512, 512), (256, 256), (128, 128)]:    # (768, 768), (512, 512), (256, 256), (128, 128)
+                mlp_name = "mlp"
+                ne_dim_rel = conf_ne[0]
+                ne_dim_spat = conf_ne[1]"""
+
     if consider_content:
         mlp_name += "_content_{}".format(word_emb_size)
     if consider_rel:
