@@ -305,7 +305,7 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
             labels_map = train_df.drop_duplicates(field_name_id).set_index(field_name_id)[field_name_label].to_dict()
             labels = np.array([labels_map[uid] for uid in ids])
             y_train = torch.tensor(labels, dtype=torch.float32)
-            posts_embs = torch.tensor(list(users_embs_dict.values()), dtype=torch.float32)
+            posts_embs = torch.tensor(np.array(list(users_embs_dict.values())), dtype=torch.float32)
             # === ramo BERT+Softmax ===
             if (not exists(softmax_pkl_path) and not exists(softmax_state_path)) or retrain:
                 train_ds = TensorDataset(posts_embs, y_train)
