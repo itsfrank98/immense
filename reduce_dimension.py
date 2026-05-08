@@ -57,7 +57,7 @@ def reduce_dimension(lab, model_dir, ne_dim, train_df, we_dim, batch_size, edge_
     graph = create_graph(inv_map=inv_map_train, weighted=weighted, features=features_dict, edg_dir=edge_path,
                          df=train_df, separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
     save_to_pickle(f"graph_{lab}_{we_dim}.pkl", graph)
-    graph = graph.to(device)
+    #graph = graph.to(device)
     split = T.RandomLinkSplit(num_val=0.1, num_test=0.0, is_undirected=not directed,
                               add_negative_train_samples=False, neg_sampling_ratio=1.0)
     train_data, valid_data, _ = split(graph)
