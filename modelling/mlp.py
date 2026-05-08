@@ -13,7 +13,7 @@ from utils import save_to_pickle
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, X_train, y_train, model_path, loss, batch_size=64, epochs=50, weights=None):
+    def __init__(self, X_train, y_train, model_path, loss, batch_size=64, epochs=50, weights=None, hidden_dim=3):
         super(MLP, self).__init__()
         self.X_train = X_train
         self.weights = weights
@@ -21,9 +21,16 @@ class MLP(torch.nn.Module):
         self._model_path = join(model_path)
         self.batch_size = batch_size
         self.epochs = epochs
-        self.input = Linear(in_features=7, out_features=3)
-        self.output = Linear(in_features=3, out_features=2)
         self.loss = loss
+
+        input_dim = X_train.shape[1]
+        num_classes = len(torch.unique(self.y_train.long()))  # numero di classi dinamico
+
+        print(f"[MLP init] input_dim={input_dim}, hidden_dim={hidden_dim}, num_classes={num_classes}")
+
+        # definizione rete
+        self.input = Linear(in_features=input_dim, out_features=hidden_dim)
+        self.output = Linear(in_features=hidden_dim, out_features=num_classes)
 
     def forward(self, x):
         x = self.input(x)

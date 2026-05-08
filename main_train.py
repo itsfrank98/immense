@@ -2,7 +2,7 @@ import time
 import numpy as np
 import pandas as pd
 import yaml
-from modelling.immense import train, train_w2v_model
+from modelling.immense import train, train_w2v_model, get_or_create_bert_embeddings
 from os import makedirs
 from os.path import exists, join
 
@@ -19,6 +19,7 @@ if __name__ == "__main__":
     field_text = dataset_general_params["field_text"]
     field_label = dataset_general_params["field_label"]
     train_df = dataset_general_params["train_df"]
+    bert = dataset_general_params["bert"]
     path_rel = train_dataset_params["train_social_net"]
     path_spat = train_dataset_params["train_spatial_net"]
     consider_content = train_dataset_params["consider_content"]
@@ -28,6 +29,10 @@ if __name__ == "__main__":
     retrain = train_dataset_params["retrain"]
 
     models_dir = model_params["dir_models"]
+    if bert:
+        models_dir += "/with_bert"
+    else:
+        models_dir += "/with_w2v"
     epochs_rel = model_params["epochs_rel"]
     epochs_spat = model_params["epochs_spat"]
     mlp_batch_size = int(model_params["mlp_batch_size"])
@@ -43,8 +48,11 @@ if __name__ == "__main__":
     if not exists(models_dir):
         makedirs(models_dir)
     train_df = pd.read_csv(train_df)
-
-    users_embs_dict = train_w2v_model(embedding_size=word_emb_size, epochs=w2v_epochs, id_field_name=field_id,
+    if bert:
+        users_embs_dict = get_or_create_bert_embeddings(train_df=train_df, model_dir=models_dir, id_field_name=field_id,
+                                        text_field_name=field_text)
+    else:
+        users_embs_dict = train_w2v_model(embedding_size=word_emb_size, epochs=w2v_epochs, id_field_name=field_id,
                                       model_dir=models_dir, text_field_name=field_text, train_df=train_df)
 
 

@@ -5,7 +5,7 @@ seed = 123
 np.random.seed(seed)
 
 
-class WordEmb:
+class WordEmbW2V:
     def __init__(self, token_word, embedding_size, window, epochs, model_dir):
         self._token_word = token_word
         self._word_vec_dict = {}
