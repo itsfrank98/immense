@@ -28,11 +28,6 @@ if __name__ == "__main__":
     separator = train_dataset_params["separator"]
     retrain = train_dataset_params["retrain"]
 
-    models_dir = model_params["dir_models"]
-    if bert:
-        models_dir += "/with_bert"
-    else:
-        models_dir += "/with_w2v"
     epochs_rel = model_params["epochs_rel"]
     epochs_spat = model_params["epochs_spat"]
     mlp_batch_size = int(model_params["mlp_batch_size"])
@@ -42,8 +37,13 @@ if __name__ == "__main__":
     word_emb_size = int(model_params["word_emb_size"])
     w2v_epochs = int(model_params["w2v_epochs"])
     loss = model_params["loss"]
+    models_dir = model_params["dir_models"]
+    if bert:
+        models_dir += "/with_bert"
+        word_emb_size = 768
+    else:
+        models_dir += "/with_w2v"
 
-    w2v_path = join(models_dir, "w2v_{}.pkl".format(word_emb_size))
 
     if not exists(models_dir):
         makedirs(models_dir)
