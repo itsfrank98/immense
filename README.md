@@ -5,7 +5,7 @@ Twitter data. <br>
 # Usage
 You first need to install the dependencies listed in ```requirements.txt```. The file ```parameters.yaml``` contains the
 parameters that have to be set according to your dataset and the way you want to run the experiments.
-The project was realized with **```python 3.8.6```**
+The project was realized with **```python 3.10.20```**
 
 ## Files format
 The system is multimodal, meaning that it analyzes three different dimensions, respectively the **content**, the **social
@@ -56,6 +56,10 @@ The ```parameters.yaml``` file contains four sections:
 * ```train_dataset_params```: parameters specific to the training dataset
 * ```test_dataset_params```: parameters specific to the training dataset
 * ```model_params```: parameters for the model to learn
+* ```bert```: you can set this to:
+  * ```true```: the content is converted to BERT embeddings, that are used to learn a softmax classifier that, for each user, will output his probabiolities of being safe and risky.
+  * ```false```: the content is converted to word2vec embeddings that are used to train two separate autoencoders: one for the risky users and one for the safe users. They both output a reconstruction error
+    
 
 Once the parameter file is completed, you can train the models by running [main_train.py](main_train.py)
 and, after the training is completed, test it running [main_test.py](main_test.py). The test will plot a confusion matrix and
