@@ -58,7 +58,6 @@ def get_or_create_bert_embeddings(model_dir, train_df, id_field_name="id", text_
     # salva come torch tensors
     torch.save(torch.tensor(embeddings), embs_path)
 
-
     return embeddings_dict
 
 
@@ -373,35 +372,43 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
                                    content_embs=posts_embs, mlp_name=mlp_name,
                                    mlp_loss=loss, rel_preds=x_rel, spat_preds=x_spat, weights=weights)
         if mlp is not None:
-            makedirs(join(model_dir, "models", "mlp"), exist_ok=True)
-            save_to_pickle(join(model_dir, "models", "mlp", mlp_name), mlp)
+            makedirs(join(model_dir, "mlp"), exist_ok=True)
+            save_to_pickle(join(model_dir, "mlp", mlp_name), mlp)
     else:
         model_fusion(ae_dang=risky_ae, ae_safe=safe_ae, content_embs=posts_embs, model_dir=model_dir, rel_preds=x_rel,
                     spat_preds=x_spat, y_train=y_train, weights=weights, mlp_name=mlp_name, mlp_loss=loss)
 
 
 def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_model, consider_content, mlp_loss,
-         consider_rel, consider_spat, ae_risky=None, ae_safe=None, mod_rel=None, mod_spat=None, rel_net_path=None,
-         spat_net_path=None, separator="\t"):
+         consider_rel, consider_spat, models_dir, bert, ae_risky=None, ae_safe=None, mod_rel=None, mod_spat=None,
+         rel_net_path=None, softmax_model=None, spat_net_path=None, separator="\t"):
     tok = TextPreprocessing()
     posts = tok.token_dict(df, text_field_name=field_name_text, id_field_name=field_name_id)
-    test_set = torch.zeros(len(posts), 7)
-    posts_embs_dict = w2v_model.text_to_vec(posts)
+    n_of_columns = 6 if bert else 7
+    test_set = torch.zeros(len(posts), n_of_columns)
+    if bert:
+        posts_embs_dict = get_or_create_bert_embeddings(model_dir=models_dir, train_df=df, id_field_name=field_name_id,
+                                                        text_field_name=field_name_text, label_field_name=field_name_label)
+    else:
+        posts_embs_dict = w2v_model.text_to_vec(posts)
     if consider_content:
         posts_embs = torch.tensor(np.array(list(posts_embs_dict.values())), dtype=torch.float32)
-        pred_safe = ae_safe.predict(posts_embs)
-        pred_risky = ae_risky.predict(posts_embs)
-        loss = MSELoss()
-        pred_loss_safe = []
-        pred_loss_risky = []
-        for i in range(posts_embs.shape[0]):
-            pred_loss_safe.append(loss(posts_embs[i], pred_safe[i]))
-            pred_loss_risky.append(loss(posts_embs[i], pred_risky[i]))
+        if bert:
+            pass
+        else:
+            pred_safe = ae_safe.predict(posts_embs)
+            pred_risky = ae_risky.predict(posts_embs)
+            loss = MSELoss()
+            pred_loss_safe = []
+            pred_loss_risky = []
+            for i in range(posts_embs.shape[0]):
+                pred_loss_safe.append(loss(posts_embs[i], pred_safe[i]))
+                pred_loss_risky.append(loss(posts_embs[i], pred_risky[i]))
 
-        labels = [0 if i < j else 1 for i, j in zip(pred_loss_safe, pred_loss_risky)]
-        test_set[:, 0] = torch.tensor(pred_loss_safe, dtype=torch.float32)
-        test_set[:, 1] = torch.tensor(pred_loss_risky, dtype=torch.float32)
-        test_set[:, 2] = torch.tensor(labels, dtype=torch.float32)
+            labels = [0 if i < j else 1 for i, j in zip(pred_loss_safe, pred_loss_risky)]
+            test_set[:, 0] = torch.tensor(pred_loss_safe, dtype=torch.float32)
+            test_set[:, 1] = torch.tensor(pred_loss_risky, dtype=torch.float32)
+            test_set[:, 2] = torch.tensor(labels, dtype=torch.float32)
 
     if consider_rel:
         mapper, inv_map_rel = create_mappers(posts_embs_dict)
