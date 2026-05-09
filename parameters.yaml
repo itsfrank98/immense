@@ -1,5 +1,5 @@
 dataset_general_params:
-  bert: True
+  bert: False
   dir_graph: "dataset/big_dataset/graph"
   train_df: "dataset/big_dataset/train.csv"
   field_id: "id"

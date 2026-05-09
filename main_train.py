@@ -69,6 +69,6 @@ if __name__ == "__main__":
     train(train_df=train_df, model_dir=models_dir, gnn_batch_size=64, field_name_id=field_id,
           field_name_label=field_label, path_rel=path_rel, path_spat=path_spat, word_emb_size=word_emb_size,
           ne_dim_spat=ne_dim_spat, ne_dim_rel=ne_dim_rel, eps_nembs_spat=epochs_spat, eps_nembs_rel=epochs_rel,
-          consider_rel=consider_rel, separator=separator, consider_spat=consider_spat,
+          consider_rel=consider_rel, separator=separator, consider_spat=consider_spat, bert=bert,
           consider_content=consider_content, users_embs_dict=users_embs_dict, loss=loss, retrain=retrain)
     print("Elapsed time: {}".format(time.time()-now))

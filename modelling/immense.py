@@ -226,10 +226,9 @@ def get_or_create_split_embeddings(split: str, dataset_path, id_field_name, text
     return embeddings, labels, ids
 
 
-def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, users_embs_dict, separator, loss,
+def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, users_embs_dict, separator, loss, bert,
           gnn_batch_size=None, consider_content=True, consider_rel=True, consider_spat=True, ne_dim_rel=None,
-          ne_dim_spat=None, eps_nembs_rel=None, eps_nembs_spat=None, path_rel=None, path_spat=None, retrain=False,
-          bert=True):
+          ne_dim_spat=None, eps_nembs_rel=None, eps_nembs_spat=None, path_rel=None, path_spat=None, retrain=False):
     """
     Builds and trains the independent modules that analyze content, social relationships and spatial relationships, and
     then fuses them with the MLP
@@ -394,7 +393,9 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
     if consider_content:
         posts_embs = torch.tensor(np.array(list(posts_embs_dict.values())), dtype=torch.float32)
         if bert:
-            pass
+            logits = softmax_model(posts_embs)
+            probs = torch.softmax(logits, dim=1).cpu()
+            test_set[:, 0:2] = probs
         else:
             pred_safe = ae_safe.predict(posts_embs)
             pred_risky = ae_risky.predict(posts_embs)
@@ -419,7 +420,8 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
             rel_preds = mod_rel(graph, inference=True).cpu().detach().numpy()
         safe_rel_probs = torch.tensor(rel_preds[:, 0], dtype=torch.float32)
         risky_rel_probs = torch.tensor(rel_preds[:, 1], dtype=torch.float32)
-        test_set[:, 3], test_set[:, 4] = safe_rel_probs, risky_rel_probs
+        index = 2 if bert else 3
+        test_set[:, index], test_set[:, index+1] = safe_rel_probs, risky_rel_probs
     if consider_spat:
         mapper, inv_map_sp = create_mappers(posts_embs_dict)
         graph = create_graph(inv_map=inv_map_sp, weighted=True, features=posts_embs_dict, edg_dir=spat_net_path, df=df,
@@ -429,8 +431,9 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
             spat_preds = mod_spat(graph, inference=False).cpu().detach().numpy()
         safe_spat_probs = torch.tensor(spat_preds[:, 0], dtype=torch.float32)
         risky_spat_probs = torch.tensor(spat_preds[:, 1], dtype=torch.float32)
-        test_set[:, 5], test_set[:, 6] = safe_spat_probs, risky_spat_probs
-    save_to_pickle("explainability/x_test_{}_{}.pkl".format(posts_embs.shape[1], mlp_loss), test_set)
+        index = 4 if bert else 5
+        test_set[:, index], test_set[:, index+1] = safe_spat_probs, risky_spat_probs
+
     pred = mlp.test(test_set)
     y_true = np.array(df[field_name_label])
 
