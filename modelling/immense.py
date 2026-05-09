@@ -33,22 +33,24 @@ def get_or_create_bert_embeddings(model_dir, train_df, id_field_name="id", text_
     ).to_dict()
     embs_path = join(model_dir, "bert_embeddings.pt")
     if exists(embs_path):
-        print(f"[BERT] Carico embeddings")
+        print(f"[BERT] Loading embeddings")
         emb_t = torch.load(embs_path)
         embeddings = emb_t.numpy() if isinstance(emb_t, torch.Tensor) else np.array(emb_t)
     else:
         start_emb = time.time()
-        print(f"[BERT] File non trovati. Calcolo embeddings ...")
+        print(f"[BERT] File not found. Computing embeddings ...")
         # pulizia minima
         train_df = train_df.dropna(subset=[id_field_name, text_field_name, label_field_name])
         train_df = train_df[train_df[text_field_name].str.strip() != ""]
         if len(user_text_dict) == 0:
-            raise RuntimeError("[BERT] Nessun testo trovato nel dataset.")
+            raise RuntimeError("[BERT] No text in the dataset.")
 
         # embeddings con WordEmb
         emb_gen = WordEmb()
         embeddings = emb_gen.texts_to_vec(list(user_text_dict.values()))
-        print(f"Embeddings appresi e salvati in {embs_path}. Tempo impiegato: {time.time() - start_emb:.1f}s")
+        print(f"Embeddings learned and saved in {embs_path}. Elapsed time: {time.time() - start_emb:.1f}s")
+
+        # this is to free up some space on the gpu
         emb_gen.model.to('cpu')
         del emb_gen
         torch.cuda.empty_cache()
@@ -139,7 +141,7 @@ def model_fusion(model_dir, y_train, content_embs, mlp_name, mlp_loss, mlp_lr=.0
         safe_spat_probs = torch.tensor(spat_preds[:, 0], dtype=torch.float32)
         risky_spat_probs = torch.tensor(spat_preds[:, 1], dtype=torch.float32)
         dataset[:, 5], dataset[:, 6] = safe_spat_probs, risky_spat_probs
-    save_to_pickle("explainability/X_train_{}_{}.pkl".format(content_embs.shape[1], mlp_loss), dataset)
+
     mlp = MLP(X_train=dataset, y_train=y_train, model_path=join(model_dir, "mlp", mlp_name), weights=weights, loss=mlp_loss)
     optim = Adam(mlp.parameters(), lr=mlp_lr, weight_decay=1e-4)
     mlp.train_mlp(optim)
@@ -193,9 +195,6 @@ def model_fusion_softmax(model, model_dir, y_train, content_embs, mlp_name, mlp_
     optim = Adam(mlp.parameters(), lr=mlp_lr, weight_decay=1e-4)
     mlp.train_mlp(optim)
 
-    # Salva il modello
-    #torch.save(mlp.state_dict(), join(model_dir, "models", "mlp", mlp_name))
-
     return mlp
 
 
@@ -204,26 +203,6 @@ def get_relational_preds(df, node_embs=None):
     dataset[:, 0] = torch.tensor(node_embs[:, 0], dtype=torch.float32)
     dataset[:, 1] = torch.tensor(node_embs[:, 1], dtype=torch.float32)
     return dataset
-
-
-def get_or_create_split_embeddings(split: str, dataset_path, id_field_name, text_field_name, label_field_name):
-    """
-    Gestisce embeddings BERT sia per train che per test, salvandoli in file .pt.
-    split: "train" oppure "test"
-    """
-    emb_file = join("models", f"embeddings_{split}.pt")
-    lbl_file = join("models", f"labels_{split}.pt")
-
-    embeddings, labels, ids, acc = get_or_create_bert_embeddings(
-        emb_file=emb_file,
-        lbl_file=lbl_file,
-        dataset_path=dataset_path,
-        id_field_name=id_field_name,
-        text_field_name=text_field_name,
-        label_field_name=label_field_name
-    )
-    print(f"[BERT] {split} set: accuracy media modello = {acc:.4f}")
-    return embeddings, labels, ids
 
 
 def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, users_embs_dict, separator, loss, bert,
@@ -422,6 +401,7 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
         risky_rel_probs = torch.tensor(rel_preds[:, 1], dtype=torch.float32)
         index = 2 if bert else 3
         test_set[:, index], test_set[:, index+1] = safe_rel_probs, risky_rel_probs
+
     if consider_spat:
         mapper, inv_map_sp = create_mappers(posts_embs_dict)
         graph = create_graph(inv_map=inv_map_sp, weighted=True, features=posts_embs_dict, edg_dir=spat_net_path, df=df,

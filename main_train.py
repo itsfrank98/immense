@@ -4,7 +4,7 @@ import pandas as pd
 import yaml
 from modelling.immense import train, train_w2v_model, get_or_create_bert_embeddings
 from os import makedirs
-from os.path import exists, join
+from os.path import exists
 
 np.random.seed(123)
 
