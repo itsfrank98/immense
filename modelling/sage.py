@@ -107,7 +107,7 @@ class SAGE(torch.nn.Module):
             x = torch.log_softmax(x, dim=-1)
 
         if inference and self.loss == "focal":
-            x = F.log_softmax(x)
+            x = F.log_softmax(x, dim=-1)
         return x
 
     def train_sage(self, train_loader, optimizer, weights):
@@ -120,9 +120,13 @@ class SAGE(torch.nn.Module):
             out = self(batch)
             if self.loss == "weighted":
                 loss = F.nll_loss(out, target=batch.y, weight=weights)
-            if self.loss == "focal":
+            elif self.loss == "focal":
                 target = torch.tensor(np.eye(2, dtype='uint8')[batch.y.cpu()], dtype=torch.float)
                 loss = binary_focal_loss_with_logits(out, target=target.to(self.device), reduction="mean")
+            elif self.loss == "none":
+                loss = F.nll_loss(out, target=batch.y, weight=None)
+            else:
+                raise ValueError("loss must either be 'weighted', 'focal' or 'none'")
             loss.backward()
             optimizer.step()
             total_loss += loss.item()

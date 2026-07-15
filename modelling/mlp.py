@@ -58,6 +58,9 @@ class MLP(torch.nn.Module):
                     loss = binary_focal_loss_with_logits(out, target=target, reduction="mean")
                 elif self.loss == "weighted":
                     loss = nll_loss(out, batch_y.long(), weight=self.weights)
+                elif self.loss == "none":
+                    loss = F.cross_entropy(out, batch_y.long())
+
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
