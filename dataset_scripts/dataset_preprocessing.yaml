@@ -1,0 +1,9 @@
+content_path: "../dataset/dataset_GAB/synthetic_users.tsv"
+field_name_id: "account_id"
+field_name_text: "posts"
+spat_edges_fname: ""
+rel_edges_fname: "../dataset/dataset_GAB/graph/synthetic_social_network.edg"
+setting: "binary"
+
+output_dataset_dir: "../dataset/dataset_GAB/synthetic"
+output_graph_dir: "../dataset/dataset_GAB/synthetic"

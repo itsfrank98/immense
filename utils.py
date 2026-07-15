@@ -126,3 +126,18 @@ def create_id_mapping(path_to_edgelist, dst_path):
         d[i] = el
         i += 1
     save_to_pickle(dst_path, d)
+
+def read_edg_file(path, type_pairs="list"):
+    edges = []
+    with open(path, "r") as f:
+        for line in f.readlines():
+            if type_pairs == "list":
+                edges.append(line.split())
+            elif type_pairs == "tuple":
+                edges.append(tuple(line.split()))
+    return edges
+
+def write_edg_file(edges, path):
+    with open(path, "w") as f:
+        for ed in edges:
+            f.write(f"{ed[0]}\t{ed[1]}\n")

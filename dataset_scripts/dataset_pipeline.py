@@ -9,8 +9,6 @@ with open("../dataset_preprocessing.yaml", 'r') as params_file:
 
 content_path = params["content_path"]
 rel_path = params["rel_path"]
-field_name_id = params["field_name_id"]
-field_name_text = params["field_name_text"]
 spat_edges_fname = params["spat_edges_fname"]
 rel_edges_fname = params["rel_edges_fname"]
 dataset_dir = params["output_dataset_dir"]

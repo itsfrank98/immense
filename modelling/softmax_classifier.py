@@ -20,10 +20,9 @@ class SoftmaxClassifier(nn.Module):
         """
         super(SoftmaxClassifier, self).__init__()
         self.device = torch.device("cpu")
-        self.loss = loss  # ✅ mancava questa riga!
+        self.loss = loss
         self.weights = weights.to(self.device) if weights is not None else None
 
-        # Architettura semplice
         self.fc1 = nn.Linear(embedding_dim, 100)
         self.fc2 = nn.Linear(100, num_classes)
         self.dropout = nn.Dropout(0.3)
@@ -46,9 +45,6 @@ class SoftmaxClassifier(nn.Module):
         return out
 
     def train_model(self, train_loader, val_loader=None, optimizer=None, num_epochs=50, learning_rate=0.001):
-        """
-        Ciclo di training del classificatore softmax.
-        """
         device = self.device
         if optimizer is None:
             optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
