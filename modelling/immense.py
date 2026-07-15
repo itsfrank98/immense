@@ -1,3 +1,4 @@
+import os.path
 import time
 from os import makedirs
 from os.path import exists, join
@@ -205,7 +206,7 @@ def get_relational_preds(df, node_embs=None):
     return dataset
 
 
-def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, users_embs_dict, separator, loss, bert,
+def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, users_embs_dict, separator, loss, embedding_type,
           gnn_batch_size=None, consider_content=True, consider_rel=True, consider_spat=True, ne_dim_rel=None,
           ne_dim_spat=None, eps_nembs_rel=None, eps_nembs_spat=None, path_rel=None, path_spat=None, retrain=False):
     """
@@ -228,8 +229,7 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
     :param eps_nembs_spat: Epochs for training the spatial node embedding model. Can be None if consider_spat=False
     :param path_rel: Path to the file stating the social relationships among the users. Can be None if consider_rel=False
     :param path_spat: Path to the file stating the spatial relationships among the users. Can be None if consider_spat=False
-    :param weights: Tensor containing the weights to use during training to compensate for data imbalance
-    :param bert: set this to true for using bert embeddings, to false for using word2vec embeddings
+    :param embedding_type: set this to true for using bert embeddings, to false for using word2vec embeddings
     :return: Nothing, the learned mlp will be saved in the file "mlp.h5" and put in the model directory
     """
     #retrain = True
@@ -245,11 +245,11 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
 
     weights = None
     if loss == "weighted":
-        nz = len(train_df[train_df.label == 1])
+        nz = len(train_df[train_df[field_name_label] == 1])
         if nz == 0:
             raise RuntimeError("Nessun esempio della classe positiva trovato nel train_df.")
         pos_weight = len(train_df) / nz
-        neg_weight = len(train_df) / (2 * (len(train_df) - nz))
+        neg_weight = len(train_df) / (len(train_df) - nz)
         weights = torch.tensor([neg_weight, pos_weight])
         weights = weights.to()
 
@@ -258,7 +258,7 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
     posts_embs = None
     if consider_content:
         mlp_name += "_content_{}".format(word_emb_size)
-        if not bert:
+        if embedding_type=="w2v":
             posts_embs = torch.tensor(np.array(list(users_embs_dict.values())), dtype=torch.float32)
             safe_ae_name = join(model_dir, "autoencodersafe_{}.pkl".format(word_emb_size))
             risky_ae_name = join(model_dir, "autoencoderdang_{}.pkl".format(word_emb_size))
@@ -275,15 +275,15 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
             else:
                 risky_ae = load_from_pickle(risky_ae_name)
         else:
-            softmax_pkl_path = join(model_dir, "softmax_model.pkl")
-            softmax_state_path = join(model_dir, "softmax_model_state.pt")
+            softmax_pkl_path = join(model_dir, f"softmax_model_{embedding_type}_{loss}.pkl")
+            softmax_state_path = join(model_dir, f"softmax_model_state_{embedding_type}_{loss}.pt")
             # labels allineati agli ids
             ids = train_df[field_name_id].tolist()
             labels_map = train_df.drop_duplicates(field_name_id).set_index(field_name_id)[field_name_label].to_dict()
             labels = np.array([labels_map[uid] for uid in ids])
             y_train = torch.tensor(labels, dtype=torch.float32)
             posts_embs = torch.tensor(np.array(list(users_embs_dict.values())), dtype=torch.float32)
-            # === ramo BERT+Softmax ===
+
             if (not exists(softmax_pkl_path) and not exists(softmax_state_path)) or retrain:
                 train_ds = TensorDataset(posts_embs, y_train)
                 train_loader = DataLoader(train_ds, batch_size=64, shuffle=True)
@@ -326,7 +326,7 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
     torch.cuda.empty_cache()
 
     if consider_rel:
-        mlp_name += "_rel_{}".format(ne_dim_rel)
+        mlp_name += f"_rel_{ne_dim_rel}"
         x_rel = reduce_dimension(model_dir=model_dir_rel, edge_path=path_rel, lab="rel", ne_dim=ne_dim_rel,
                                  train_df=train_df, epochs=eps_nembs_rel, sizes=[2, 3], loss=loss,
                                  features_dict=users_embs_dict, batch_size=gnn_batch_size, training_weights=weights,
@@ -334,7 +334,7 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
                                  field_name_id=field_name_id, field_name_label=field_name_label)
         torch.cuda.empty_cache()
     if consider_spat:
-        mlp_name += "_spat_{}".format(ne_dim_spat)
+        mlp_name += f"_spat_{ne_dim_rel}"
         x_spat = reduce_dimension(model_dir=model_dir_spat, edge_path=path_spat, lab="spat", ne_dim=ne_dim_spat,
                                   train_df=train_df, epochs=eps_nembs_spat, sizes=[3, 5],
                                   features_dict=users_embs_dict, batch_size=gnn_batch_size,
@@ -345,7 +345,7 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
     mlp_name += "_{}.pkl".format(loss)
     print("Learning MLP...\n")
 
-    if bert:
+    if embedding_type:
         mlp = model_fusion_softmax(model=model, model_dir=model_dir, y_train=y_train,
                                    content_embs=posts_embs, mlp_name=mlp_name,
                                    mlp_loss=loss, rel_preds=x_rel, spat_preds=x_spat, weights=weights)
@@ -358,20 +358,27 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
 
 
 def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_model, consider_content, mlp_loss,
-         consider_rel, consider_spat, models_dir, bert, ae_risky=None, ae_safe=None, mod_rel=None, mod_spat=None,
-         rel_net_path=None, softmax_model=None, spat_net_path=None, separator="\t"):
+         consider_rel, consider_spat, models_dir, real_synthetic, embedding_type, ae_risky=None, ae_safe=None,
+         mod_rel=None, mod_spat=None, rel_net_path=None, softmax_model=None, spat_net_path=None, separator="\t"):
     tok = TextPreprocessing()
     posts = tok.token_dict(df, text_field_name=field_name_text, id_field_name=field_name_id)
-    n_of_columns = 6 if bert else 7
+    n_of_columns = 7 if embedding_type=="w2v" else 6
     test_set = torch.zeros(len(posts), n_of_columns)
-    if bert:
-        posts_embs_dict = get_or_create_bert_embeddings(model_dir=models_dir, train_df=df, id_field_name=field_name_id,
+    if embedding_type == "bert":
+        embs_dict = get_or_create_bert_embeddings(model_dir=models_dir, train_df=df, id_field_name=field_name_id,
                                                         text_field_name=field_name_text, label_field_name=field_name_label)
-    else:
-        posts_embs_dict = w2v_model.text_to_vec(posts)
+    elif embedding_type == "w2v":
+        embs_dict = w2v_model.text_to_vec(posts)
+    elif embedding_type == "sonar":
+        embs_dict = load_from_pickle(os.path.join(models_dir, f"{real_synthetic}_aggregated.pkl"))
+        df_accounts = df["account_id"].unique().tolist()
+        for k in list(embs_dict.keys()):
+            if k not in df_accounts:
+                embs_dict.pop(k)
+
     if consider_content:
-        posts_embs = torch.tensor(np.array(list(posts_embs_dict.values())), dtype=torch.float32)
-        if bert:
+        posts_embs = torch.tensor(np.array(list(embs_dict.values())), dtype=torch.float32)
+        if embedding_type:
             logits = softmax_model(posts_embs)
             probs = torch.softmax(logits, dim=1).cpu()
             test_set[:, 0:2] = probs
@@ -391,27 +398,27 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
             test_set[:, 2] = torch.tensor(labels, dtype=torch.float32)
 
     if consider_rel:
-        mapper, inv_map_rel = create_mappers(posts_embs_dict)
-        graph = create_graph(inv_map=inv_map_rel, weighted=False, features=posts_embs_dict, edg_dir=rel_net_path, df=df,
+        mapper, inv_map_rel = create_mappers(embs_dict)
+        graph = create_graph(inv_map=inv_map_rel, weighted=False, features=embs_dict, edg_dir=rel_net_path, df=df,
                              separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
         with torch.no_grad():
             graph = graph.to(mod_rel.device)
             rel_preds = mod_rel(graph, inference=True).cpu().detach().numpy()
         safe_rel_probs = torch.tensor(rel_preds[:, 0], dtype=torch.float32)
         risky_rel_probs = torch.tensor(rel_preds[:, 1], dtype=torch.float32)
-        index = 2 if bert else 3
+        index = 2 if embedding_type else 3
         test_set[:, index], test_set[:, index+1] = safe_rel_probs, risky_rel_probs
 
     if consider_spat:
-        mapper, inv_map_sp = create_mappers(posts_embs_dict)
-        graph = create_graph(inv_map=inv_map_sp, weighted=True, features=posts_embs_dict, edg_dir=spat_net_path, df=df,
+        mapper, inv_map_sp = create_mappers(embs_dict)
+        graph = create_graph(inv_map=inv_map_sp, weighted=True, features=embs_dict, edg_dir=spat_net_path, df=df,
                              separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
         with torch.no_grad():
             graph = graph.to(mod_spat.device)
             spat_preds = mod_spat(graph, inference=False).cpu().detach().numpy()
         safe_spat_probs = torch.tensor(spat_preds[:, 0], dtype=torch.float32)
         risky_spat_probs = torch.tensor(spat_preds[:, 1], dtype=torch.float32)
-        index = 4 if bert else 5
+        index = 4 if embedding_type else 5
         test_set[:, index], test_set[:, index+1] = safe_spat_probs, risky_spat_probs
 
     pred = mlp.test(test_set)
