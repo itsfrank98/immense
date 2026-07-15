@@ -57,7 +57,7 @@ def reduce_dimension(lab, model_dir, ne_dim, train_df, we_dim, batch_size, edge_
     graph = create_graph(inv_map=inv_map_train, weighted=weighted, features=features_dict, edg_dir=edge_path,
                          df=train_df, separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
     save_to_pickle(f"graph_{lab}_{we_dim}.pkl", graph)
-    #graph = graph.to(device)
+    graph = graph.to(device)
     split = T.RandomLinkSplit(num_val=0.1, num_test=0.0, is_undirected=not directed,
                               add_negative_train_samples=False, neg_sampling_ratio=1.0)
     train_data, valid_data, _ = split(graph)
@@ -68,9 +68,9 @@ def reduce_dimension(lab, model_dir, ne_dim, train_df, we_dim, batch_size, edge_
         training_weights = training_weights.to(device)
 
     train_loader = NeighborLoader(train_data, num_neighbors=sizes, batch_size=batch_size)
-    if not exists(model_path) or retrain:
+    if not exists(model_path): #or retrain:
         print("Training {} node embedding model\n".format(lab))
-        optimizer = torch.optim.Adam(lr=.01, params=sage.parameters(), weight_decay=1e-4)
+        optimizer = torch.optim.Adam(lr=.0003, params=sage.parameters(), weight_decay=1e-4)
         best_loss = 9999
         for i in range(epochs):
             loss = sage.train_sage(train_loader, optimizer=optimizer, weights=training_weights)

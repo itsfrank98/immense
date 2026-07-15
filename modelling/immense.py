@@ -4,6 +4,7 @@ from os import makedirs
 from os.path import exists, join
 
 import numpy as np
+import pandas as pd
 import torch
 from sklearn.metrics import classification_report
 from torch.nn import MSELoss
@@ -167,18 +168,17 @@ def model_fusion_softmax(model, model_dir, y_train, content_embs, mlp_name, mlp_
         weights: pesi per classi (opzionali)
     """
     # 6 colonne: 2 softmax + eventuali 2 rel + eventuali 2 spat
+    n_columns = 4
     n_rows = content_embs.shape[0]
-    dataset = torch.zeros((n_rows, 6))
 
-    # === Output della softmax come prime due colonne ===
+    dataset = torch.zeros((n_rows, n_columns))
+
     softmax_outputs = torch.tensor(model.predict_proba(content_embs), dtype=torch.float32)
     dataset[:, 0:2] = softmax_outputs
 
-    # === Aggiunta predizioni relazionali ===
     if rel_preds is not None:
         dataset[:, 2:4] = torch.tensor(rel_preds[:, 0:2], dtype=torch.float32)
 
-    # === Aggiunta predizioni spaziali ===
     if spat_preds is not None:
         dataset[:, 4:6] = torch.tensor(spat_preds[:, 0:2], dtype=torch.float32)
 
@@ -232,6 +232,7 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
     :param embedding_type: set this to true for using bert embeddings, to false for using word2vec embeddings
     :return: Nothing, the learned mlp will be saved in the file "mlp.h5" and put in the model directory
     """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     #retrain = True
     y_train = list(train_df[field_name_label])
     dang_posts_ids = list(train_df.loc[train_df[field_name_label] == 1][field_name_id])
@@ -251,7 +252,7 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
         pos_weight = len(train_df) / nz
         neg_weight = len(train_df) / (len(train_df) - nz)
         weights = torch.tensor([neg_weight, pos_weight])
-        weights = weights.to()
+        weights = weights.to(device)
 
     mlp_name = "mlp"
     safe_ae = risky_ae = None
@@ -345,7 +346,7 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
     mlp_name += "_{}.pkl".format(loss)
     print("Learning MLP...\n")
 
-    if embedding_type:
+    if embedding_type in ["bert", "sonar"]:
         mlp = model_fusion_softmax(model=model, model_dir=model_dir, y_train=y_train,
                                    content_embs=posts_embs, mlp_name=mlp_name,
                                    mlp_loss=loss, rel_preds=x_rel, spat_preds=x_spat, weights=weights)
@@ -357,32 +358,30 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
                     spat_preds=x_spat, y_train=y_train, weights=weights, mlp_name=mlp_name, mlp_loss=loss)
 
 
-def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_model, consider_content, mlp_loss,
+def test(test_df, train_df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_model, consider_content, mlp_loss,
          consider_rel, consider_spat, models_dir, real_synthetic, embedding_type, ae_risky=None, ae_safe=None,
          mod_rel=None, mod_spat=None, rel_net_path=None, softmax_model=None, spat_net_path=None, separator="\t"):
     tok = TextPreprocessing()
-    posts = tok.token_dict(df, text_field_name=field_name_text, id_field_name=field_name_id)
-    n_of_columns = 7 if embedding_type=="w2v" else 6
+    posts = tok.token_dict(test_df, text_field_name=field_name_text, id_field_name=field_name_id)
+    n_of_columns = 7 if embedding_type=="w2v" else 4
     test_set = torch.zeros(len(posts), n_of_columns)
     if embedding_type == "bert":
-        embs_dict = get_or_create_bert_embeddings(model_dir=models_dir, train_df=df, id_field_name=field_name_id,
-                                                        text_field_name=field_name_text, label_field_name=field_name_label)
+        embs_dict = get_or_create_bert_embeddings(model_dir=models_dir, train_df=test_df, id_field_name=field_name_id,
+                                                  text_field_name=field_name_text, label_field_name=field_name_label)
     elif embedding_type == "w2v":
         embs_dict = w2v_model.text_to_vec(posts)
     elif embedding_type == "sonar":
-        embs_dict = load_from_pickle(os.path.join(models_dir, f"{real_synthetic}_aggregated.pkl"))
-        df_accounts = df["account_id"].unique().tolist()
+        full_embs_dict = load_from_pickle(os.path.join(models_dir, f"{real_synthetic}_aggregated.pkl"))
+        full_embs_dict = {int(k): v for k, v in full_embs_dict.items()}
+        df_accounts = test_df["account_id"].unique().tolist()
+        embs_dict = full_embs_dict.copy()      # full_embs_dict will be used to create the full graph. embs_dict contains only the test set user embeddings
         for k in list(embs_dict.keys()):
             if k not in df_accounts:
                 embs_dict.pop(k)
 
     if consider_content:
         posts_embs = torch.tensor(np.array(list(embs_dict.values())), dtype=torch.float32)
-        if embedding_type:
-            logits = softmax_model(posts_embs)
-            probs = torch.softmax(logits, dim=1).cpu()
-            test_set[:, 0:2] = probs
-        else:
+        if embedding_type == "w2v":
             pred_safe = ae_safe.predict(posts_embs)
             pred_risky = ae_risky.predict(posts_embs)
             loss = MSELoss()
@@ -396,14 +395,21 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
             test_set[:, 0] = torch.tensor(pred_loss_safe, dtype=torch.float32)
             test_set[:, 1] = torch.tensor(pred_loss_risky, dtype=torch.float32)
             test_set[:, 2] = torch.tensor(labels, dtype=torch.float32)
+        else:
+            logits = softmax_model(posts_embs)
+            probs = torch.softmax(logits, dim=1).cpu()
+            test_set[:, 0:2] = probs
 
     if consider_rel:
-        mapper, inv_map_rel = create_mappers(embs_dict)
-        graph = create_graph(inv_map=inv_map_rel, weighted=False, features=embs_dict, edg_dir=rel_net_path, df=df,
+        mapper, inv_map_rel = create_mappers(full_embs_dict)
+        graph = create_graph(inv_map=inv_map_rel, weighted=False, features=full_embs_dict, edg_dir=rel_net_path, df=pd.concat([test_df, train_df]),
                              separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
         with torch.no_grad():
             graph = graph.to(mod_rel.device)
-            rel_preds = mod_rel(graph, inference=True).cpu().detach().numpy()
+            rel_preds_whole_graph = mod_rel(graph, inference=True).cpu().detach().numpy()
+        test_ids = test_df["account_id"].unique().tolist()
+        test_rows = [inv_map_rel[uid] for uid in test_ids]
+        rel_preds = rel_preds_whole_graph[test_rows]
         safe_rel_probs = torch.tensor(rel_preds[:, 0], dtype=torch.float32)
         risky_rel_probs = torch.tensor(rel_preds[:, 1], dtype=torch.float32)
         index = 2 if embedding_type else 3
@@ -411,7 +417,7 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
 
     if consider_spat:
         mapper, inv_map_sp = create_mappers(embs_dict)
-        graph = create_graph(inv_map=inv_map_sp, weighted=True, features=embs_dict, edg_dir=spat_net_path, df=df,
+        graph = create_graph(inv_map=inv_map_sp, weighted=True, features=embs_dict, edg_dir=spat_net_path, df=test_df,
                              separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
         with torch.no_grad():
             graph = graph.to(mod_spat.device)
@@ -422,11 +428,14 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
         test_set[:, index], test_set[:, index+1] = safe_spat_probs, risky_spat_probs
 
     pred = mlp.test(test_set)
-    y_true = np.array(df[field_name_label])
+    y_true = np.array(test_df[field_name_label])
 
     plot_confusion_matrix(y_true=y_true, y_pred=pred)
     print(classification_report(y_true=y_true, y_pred=pred))
-
+    if not  consider_content:
+        pred_con = np.argmax(probs.detach().numpy(), 1)
+        plot_confusion_matrix(y_true=y_true, y_pred=pred_con)
+        print(classification_report(y_true=y_true, y_pred=pred_con))
     """pred_rel = np.argmax(rel_preds, 1)
     pred_spat = np.argmax(spat_preds, 1)
     print("RELATIONAL")

@@ -9,27 +9,27 @@ dataset_general_params:
 train_dataset_params:
   train_social_net: "dataset/GAB_dataset/synthetic/train_network.edg"
   consider_content: True
-  consider_rel: False
+  consider_rel: True
   consider_spat: False
   separator: "\t"
-  retrain: False
+  retrain: True
 test_dataset_params:
   test_df: "dataset/GAB_dataset/synthetic/test.tsv"
-  test_social_net: "dataset/GAB_dataset/synthetic/test_network.edg"
+  full_social_net: "dataset/GAB_dataset/synthetic/social_network_synthetic.edg"
   consider_content: True
-  consider_rel: False
+  consider_rel: True
   consider_spat: False
   separator: "\t"
 
 
 model_params:
   dir_models: "dataset/GAB_dataset/models"
-  epochs_rel: 25
+  epochs_rel: 50
   epochs_spat: 25
   mlp_batch_size: 64
-  mlp_lr: 4e-1
-  ne_dim_rel: 128
+  mlp_lr: 4e-4
+  ne_dim_rel: 1024
   ne_dim_spat: 128
   word_emb_size: 128
   w2v_epochs: 15
-  loss: "none"
+  loss: "weighted"

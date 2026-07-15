@@ -4,7 +4,7 @@ import yaml
 import os
 from modelling.immense import test
 from os.path import join, exists
-from utils import load_from_pickle
+from utils import load_from_pickle, read_df
 
 
 def main_test():
@@ -15,6 +15,7 @@ def main_test():
         test_dataset_params = params["test_dataset_params"]
         model_params = params["model_params"]
 
+    train_df = dataset_general_params["train_df"]
     field_id = dataset_general_params["field_id"]
     field_text = dataset_general_params["field_text"]
     field_label = dataset_general_params["field_label"]
@@ -22,7 +23,7 @@ def main_test():
     real_synthetic = dataset_general_params["real_synthetic"]
 
     test_df = test_dataset_params["test_df"]
-    path_rel = test_dataset_params["test_social_net"]
+    path_rel = test_dataset_params["full_social_net"]
     consider_content = test_dataset_params["consider_content"]
     consider_rel = test_dataset_params["consider_rel"]
     consider_spat = test_dataset_params["consider_spat"]
@@ -32,13 +33,11 @@ def main_test():
     ne_dim_spat = int(model_params["ne_dim_spat"])
     loss = model_params["loss"]
     word_emb_size = int(model_params["word_emb_size"])
-    models_dir = join(model_params["dir_models"], embedding, real_synthetic)
+    models_dir = join(model_params["dir_models"], embedding)
     path_spat = None
 
-    if test_df.endswith(".csv"):
-        test_df = pd.read_csv(test_df)
-    else:
-        test_df = pd.read_csv(test_df, sep="\t")
+    train_df = read_df(train_df)
+    test_df = read_df(test_df)
     mod_rel = mod_spat = softmax_model = w2v_model = dang_ae = safe_ae = None       # depending on the configuration, some of them will stay None, others won't
 
     if embedding in ["bert", "sonar"]:
@@ -77,7 +76,7 @@ def main_test():
     mlp_name += "_{}.pkl".format(loss)
     mlp = load_from_pickle(join(models_dir, "mlp", mlp_name))
     print(mlp_name.upper())
-    test(df=test_df, w2v_model=w2v_model, ae_risky=dang_ae, ae_safe=safe_ae, mlp=mlp, mod_rel=mod_rel, softmax_model=softmax_model,
+    test(test_df=test_df, train_df=train_df, w2v_model=w2v_model, ae_risky=dang_ae, ae_safe=safe_ae, mlp=mlp, mod_rel=mod_rel, softmax_model=softmax_model,
          mod_spat=mod_spat, rel_net_path=path_rel, spat_net_path=path_spat, field_name_text=field_text, models_dir=models_dir,
          field_name_id=field_id, field_name_label=field_label, consider_content=consider_content, embedding_type=embedding,
          consider_rel=consider_rel, consider_spat=consider_spat, separator=separator, mlp_loss=loss, real_synthetic=real_synthetic)

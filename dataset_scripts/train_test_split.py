@@ -32,18 +32,15 @@ def split(content_path, rel_edges_fname, id_field):
         train_df, test_df = train_test_split(df, train_size=.7, random_state=123)
 
     train_network = []
-    test_network = []
     train_ids = set(train_df[id_field].tolist())
-    test_ids = set(test_df[id_field].tolist())
 
     for ed in tqdm(network):
         if int(ed[0]) in train_ids and int(ed[1]) in train_ids:
             train_network.append(ed)
-        elif int(ed[0]) in test_ids and int(ed[1]) in test_ids:
-            test_network.append(ed)
 
-    print(len(network), len(train_network), len(test_network))
-    return train_df, test_df, train_network, test_network
+
+    print(len(network), len(train_network))
+    return train_df, test_df, train_network
 
 
 if __name__ == "__main__":
@@ -59,8 +56,7 @@ if __name__ == "__main__":
     setting = params["setting"]
 
 
-    train_df, test_df, train_network, test_network = split(content_path=content_path, rel_edges_fname=rel_edges_fname, id_field=id_field)
+    train_df, test_df, train_network,  = split(content_path=content_path, rel_edges_fname=rel_edges_fname, id_field=id_field)
     train_df.to_csv(os.path.join(dataset_dir, "train.tsv"), sep="\t", index=False)
     test_df.to_csv(os.path.join(dataset_dir, "test.tsv"), sep="\t", index=False)
     write_edg_file(train_network, os.path.join(dataset_dir, "train_network.edg"))
-    write_edg_file(test_network, os.path.join(dataset_dir, "test_network.edg"))

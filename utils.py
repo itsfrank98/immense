@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
+import pandas as pd
 import seaborn as sn
 from os.path import join
 from sklearn.decomposition import PCA
@@ -21,6 +22,11 @@ def load_from_pickle(name):
 def is_square(m):
     return m.shape[0] == m.shape[1]
 
+def read_df(path):
+    if path.endswith(".csv"):
+        return pd.read_csv(path)
+    elif path.endswith(".tsv"):
+        return pd.read_csv(path, sep="\t")
 
 def embeddings_pca(emb_model, emb_technique, dst_dir):
     if emb_technique == "node2vec":

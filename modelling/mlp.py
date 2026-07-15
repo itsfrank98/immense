@@ -32,6 +32,11 @@ class MLP(torch.nn.Module):
         self.input = Linear(in_features=input_dim, out_features=hidden_dim)
         self.output = Linear(in_features=hidden_dim, out_features=num_classes)
 
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if self.weights is not None:
+            self.weights = self.weights.to(self.device)
+        self.to(self.device)
+
     def forward(self, x):
         x = self.input(x)
         x = relu(x)
@@ -51,10 +56,11 @@ class MLP(torch.nn.Module):
             total_loss = 0
 
             for batch_x, batch_y in tqdm(dl):
+                batch_x, batch_y = batch_x.to(self.device), batch_y.to(self.device)
                 out = self(batch_x)
                 if self.loss == "focal":
                     t = [int(el) for el in batch_y]
-                    target = torch.tensor(np.eye(2, dtype='uint8')[t], dtype=torch.float)
+                    target = torch.tensor(np.eye(2, dtype='uint8')[t], dtype=torch.float).to(self.device)
                     loss = binary_focal_loss_with_logits(out, target=target, reduction="mean")
                 elif self.loss == "weighted":
                     loss = nll_loss(out, batch_y.long(), weight=self.weights)
@@ -76,9 +82,9 @@ class MLP(torch.nn.Module):
     def predict_proba(self, X_test):
         self.eval()
         with torch.no_grad():
-            logits = self(torch.tensor(X_test, dtype=torch.float))
+            logits = self(torch.tensor(X_test, dtype=torch.float).to(self.device))
             probs = F.softmax(logits, dim=-1)
-        return probs.numpy()
+        return probs.cpu().numpy()
 
     def test(self, X_test):
         probs = self.predict_proba(X_test)

@@ -40,7 +40,7 @@ if __name__ == "__main__":
     w2v_epochs = int(model_params["w2v_epochs"])
     loss = model_params["loss"]
     models_dir = model_params["dir_models"]
-    models_dir = os.path.join(models_dir, embedding, real_synthetic)
+    models_dir = os.path.join(models_dir, embedding)
 
     if embedding=="bert":
         word_emb_size = 768
@@ -64,15 +64,6 @@ if __name__ == "__main__":
                 users_embs_dict.pop(k)
         #train_df = train_df[train_df["account_id"].isin(list(users_embs_dict.keys()))]
 
-
-    """confs = [(True, False, False), (True, False, True), (True, True, False), (True, True, True), (False, False, True), (False, True, False), (False, True, True)]
-    for conf in confs:
-        consider_content, consider_rel, consider_spat = conf[0], conf[1], conf[2]
-        for loss in ["weighted", "focal"]:
-            word_emb_size = 768
-            for conf_ne in [(768, 768), (512, 512), (256, 256), (128, 128)]:
-                ne_dim_rel = conf_ne[0]
-                ne_dim_spat = conf_ne[1]"""
     print("CONTENT: {} REL: {} SPAT: {}".format(consider_content, consider_rel, consider_spat))
     now = time.time()
     train(train_df=train_df, model_dir=models_dir, gnn_batch_size=64, field_name_id=field_id,
