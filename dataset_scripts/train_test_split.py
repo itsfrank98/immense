@@ -47,16 +47,23 @@ if __name__ == "__main__":
     with open("dataset_preprocessing.yaml", 'r') as params_file:
         params = yaml.safe_load(params_file)
 
-    content_path = params["content_path"]
-    rel_edges_fname = params["rel_edges_fname"]
-    dataset_dir = params["output_dataset_dir"]
-    graph_dir = params["output_graph_dir"]
+    real_synthetic = params["real_synthetic"]
+    content_path = params["content_path"].format(real_synthetic)
+    rel_edges_fname = params["rel_edges_fname"].format(real_synthetic)
+    dataset_dir = params["output_dataset_dir"].format(real_synthetic)
+    graph_dir = params["output_graph_dir"].format(real_synthetic)
     id_field = params["field_name_id"]
     text_field = params["field_name_text"]
     setting = params["setting"]
 
 
     train_df, test_df, train_network,  = split(content_path=content_path, rel_edges_fname=rel_edges_fname, id_field=id_field)
+    acids = set(train_df["account_id"].astype(int).tolist())
+    r=0
+    for ed in train_network:
+        if int(ed[0]) not in acids or int(ed[1]) not in acids:
+            r+=1
+    print(r)
     train_df.to_csv(os.path.join(dataset_dir, "train.tsv"), sep="\t", index=False)
     test_df.to_csv(os.path.join(dataset_dir, "test.tsv"), sep="\t", index=False)
     write_edg_file(train_network, os.path.join(dataset_dir, "train_network.edg"))

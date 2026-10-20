@@ -23,8 +23,12 @@ class SoftmaxClassifier(nn.Module):
         self.loss = loss
         self.weights = weights.to(self.device) if weights is not None else None
 
-        self.fc1 = nn.Linear(embedding_dim, 100)
-        self.fc2 = nn.Linear(100, num_classes)
+        self.input_norm = nn.LayerNorm(embedding_dim)
+        self.fc1 = nn.Linear(embedding_dim, 512)
+        self.norm1 = nn.LayerNorm(512)
+        self.fc2 = nn.Linear(512, num_classes)
+        # self.norm2 = nn.LayerNorm(256)
+        # self.fc3 = nn.Linear(256, num_classes)
         self.dropout = nn.Dropout(0.3)
 
         self.to("cpu")
@@ -35,16 +39,35 @@ class SoftmaxClassifier(nn.Module):
         else:
             x = x.to("cpu", dtype=torch.float32)
 
+        #x = self.input_norm(x)
         x = self.fc1(x)
+        x = self.norm1(x)
         x = torch.relu(x)
         x = self.dropout(x)
         out = self.fc2(x)
+        # x = self.norm2(x)
+        # x = torch.relu(x)
+        # x = self.dropout(x)
+        # out = self.fc3(x)
 
         if self.loss == "weighted":
             out = torch.log_softmax(out, dim=-1)
         return out
 
-    def train_model(self, train_loader, val_loader=None, optimizer=None, num_epochs=50, learning_rate=0.001):
+    def save_checkpoint(self, state_path=None, pkl_path=None):
+        """
+        Saves the model's state_dict and/or a full pickle of the model.
+        """
+        if state_path is not None:
+            os.makedirs(os.path.dirname(state_path), exist_ok=True)
+            torch.save(self.state_dict(), state_path)
+        if pkl_path is not None:
+            os.makedirs(os.path.dirname(pkl_path), exist_ok=True)
+            with open(pkl_path, "wb") as f:
+                pickle.dump(self, f)
+
+    def train_model(self, train_loader, val_loader=None, optimizer=None, num_epochs=50, learning_rate=0.0001,
+                    state_path=None, pkl_path=None):
         device = self.device
         if optimizer is None:
             optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
@@ -66,7 +89,7 @@ class SoftmaxClassifier(nn.Module):
                 out = self(batch_x)
 
                 if self.loss == "focal":
-                    target = torch.tensor(np.eye(self.fc2.out_features, dtype='uint8')[batch_y.cpu()],
+                    target = torch.tensor(np.eye(self.fc2.out_features, dtype='uint8')[batch_y.cpu().long().numpy()],
                                           dtype=torch.float).to(self.device)
                     loss = binary_focal_loss_with_logits(out, target=target, reduction="mean")
                 elif self.loss == "weighted":
@@ -92,9 +115,15 @@ class SoftmaxClassifier(nn.Module):
                 val_loss, val_accuracy, _ = self.test(val_loader)
                 history['val_loss'].append(val_loss)
                 history['val_acc'].append(val_accuracy)
-                if val_loss < best_loss:
-                    best_loss = val_loss
-                    print(f"New best model found at epoch {epoch + 1}. Val Loss: {val_loss:.4f}")
+                monitored_loss = val_loss
+            else:
+                monitored_loss = avg_train_loss
+
+            if monitored_loss < best_loss:
+                best_loss = monitored_loss
+                metric_name = "Val Loss" if val_loader is not None else "Train Loss"
+                print(f"New best model found at epoch {epoch + 1}. {metric_name}: {monitored_loss:.4f}")
+                self.save_checkpoint(state_path=state_path, pkl_path=pkl_path)
 
             if epoch % 5 == 0:
                 print(f"\nEpoch: {epoch + 1}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.2f}%")
@@ -121,7 +150,7 @@ class SoftmaxClassifier(nn.Module):
 
             if self.loss == "focal":
                 target = torch.tensor(
-                    np.eye(self.fc2.out_features, dtype='uint8')[batch_y.cpu()],
+                    np.eye(self.fc3.out_features, dtype='uint8')[batch_y.cpu().long().numpy()],
                     dtype=torch.float
                 ).to(self.device)
                 loss = binary_focal_loss_with_logits(out, target=target, reduction="mean")

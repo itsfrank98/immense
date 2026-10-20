@@ -9,7 +9,7 @@ from utils import save_to_pickle
 
 
 def reduce_dimension(lab, model_dir, ne_dim, train_df, we_dim, batch_size, edge_path, epochs, features_dict, sizes,
-                     training_weights, separator, field_name_id, field_name_label, loss, retrain=False):
+                     aggregation, training_weights, separator, field_name_id, field_name_label, loss, retrain=False):
     """
     This function applies one of the node dimensionality reduction techniques and generate the feature vectors for
     training the decision tree.
@@ -38,8 +38,8 @@ def reduce_dimension(lab, model_dir, ne_dim, train_df, we_dim, batch_size, edge_
         predictions (n, num_classes): Predictions made by the node embedding model for the nodes. For each node, its
         prediction is the computed probability of the node to belong to each of the class
     """
-    weights_path = join(model_dir, "graphsage_{}_{}_{}".format(ne_dim, we_dim, loss))
-    model_path = join(model_dir, "graphsage_{}_{}_{}".format(ne_dim, we_dim, loss))
+    weights_path = join(model_dir, f"graphsage_{aggregation}_{ne_dim}_{we_dim}_{loss}")
+    model_path = join(model_dir, f"graphsage_{aggregation}_{ne_dim}_{we_dim}_{loss}")
 
     weights_path += ".h5"
     model_path += ".pkl"
@@ -68,7 +68,7 @@ def reduce_dimension(lab, model_dir, ne_dim, train_df, we_dim, batch_size, edge_
         training_weights = training_weights.to(device)
 
     train_loader = NeighborLoader(train_data, num_neighbors=sizes, batch_size=batch_size)
-    if not exists(model_path): #or retrain:
+    if not exists(model_path):  # or retrain:
         print("Training {} node embedding model\n".format(lab))
         optimizer = torch.optim.Adam(lr=.0003, params=sage.parameters(), weight_decay=1e-4)
         best_loss = 9999

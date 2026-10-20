@@ -15,15 +15,16 @@ def main_test():
         test_dataset_params = params["test_dataset_params"]
         model_params = params["model_params"]
 
-    train_df = dataset_general_params["train_df"]
+    real_synthetic = dataset_general_params["real_synthetic"]
+    train_df = dataset_general_params["train_df"].format(real_synthetic)
     field_id = dataset_general_params["field_id"]
     field_text = dataset_general_params["field_text"]
     field_label = dataset_general_params["field_label"]
     embedding = dataset_general_params["embedding"]
-    real_synthetic = dataset_general_params["real_synthetic"]
+    aggr = dataset_general_params["aggr"]
 
-    test_df = test_dataset_params["test_df"]
-    path_rel = test_dataset_params["full_social_net"]
+    test_df = test_dataset_params["test_df"].format(real_synthetic)
+    path_rel = test_dataset_params["full_social_net"].format(real_synthetic, real_synthetic)
     consider_content = test_dataset_params["consider_content"]
     consider_rel = test_dataset_params["consider_rel"]
     consider_spat = test_dataset_params["consider_spat"]
@@ -33,7 +34,8 @@ def main_test():
     ne_dim_spat = int(model_params["ne_dim_spat"])
     loss = model_params["loss"]
     word_emb_size = int(model_params["word_emb_size"])
-    models_dir = join(model_params["dir_models"], embedding)
+    models_dir = join(model_params["dir_models"].format(real_synthetic), embedding)
+    use_ae = model_params["use_ae"]
     path_spat = None
 
     train_df = read_df(train_df)
@@ -45,19 +47,20 @@ def main_test():
             word_emb_size = 768
         else:
             word_emb_size = 1024
-        softmax_path = join(models_dir, f"softmax_model_{embedding}_{loss}.pkl")   # _{embedding_type}
-
-        if exists(softmax_path):
-            print(f"[SOFTMAX] Loading softmax model from {softmax_path}")
-            softmax_model = load_from_pickle(softmax_path)
-            softmax_model.eval()
-        else:
-            raise FileNotFoundError(f"[ERROR!] Softmax model not found in {softmax_path}")
+        softmax_path = join(models_dir, f"softmax_model_{aggr}_{word_emb_size}_{loss}.pkl")   # _{embedding_type}
     elif embedding == "w2v":
         w2v_path = join(models_dir, "w2v_{}.pkl".format(word_emb_size))
         w2v_model = load_from_pickle(w2v_path)
-        dang_ae = load_from_pickle(join(models_dir, "autoencoderdang_{}.pkl".format(word_emb_size)))
-        safe_ae = load_from_pickle(join(models_dir, "autoencodersafe_{}.pkl".format(word_emb_size)))
+
+    if use_ae:
+        dang_ae = load_from_pickle(join(models_dir, f"autoencoderdang_{aggr}_{word_emb_size}.pkl"))
+        safe_ae = load_from_pickle(join(models_dir, f"autoencodersafe_{aggr}_{word_emb_size}.pkl"))
+    elif exists(softmax_path):
+        print(f"[SOFTMAX] Loading softmax model from {softmax_path}")
+        softmax_model = load_from_pickle(softmax_path)
+        softmax_model.eval()
+    else:
+        raise FileNotFoundError(f"[ERROR!] Softmax model not found in {softmax_path}")
 
     mod_dir_rel = join(models_dir, "node_embeddings", "rel")
     mod_dir_spat = join(models_dir, "node_embeddings", "spat")
@@ -66,20 +69,22 @@ def main_test():
     if consider_content:
         mlp_name += "_content_{}".format(word_emb_size)
     if consider_rel:
-        mod_rel_name = f"graphsage_{ne_dim_rel}_{word_emb_size}_{loss}.pkl"
+        mod_rel_name = f"graphsage_{aggr}_{ne_dim_rel}_{word_emb_size}_{loss}.pkl"
         mod_rel = load_from_pickle(join(mod_dir_rel, mod_rel_name))
         mlp_name += "_rel_{}".format(ne_dim_rel)
     if consider_spat:
-        mod_spat_name = f"graphsage_{ne_dim_spat}_{word_emb_size}_{loss}.pkl"
+        mod_spat_name = f"graphsage_{aggr}_{ne_dim_rel}_{word_emb_size}_{loss}.pkl"
         mod_spat = load_from_pickle(join(mod_dir_spat, mod_spat_name))
-        mlp_name += "_spat_{}".format(ne_dim_spat)
-    mlp_name += "_{}.pkl".format(loss)
-    mlp = load_from_pickle(join(models_dir, "mlp", mlp_name))
+        mlp_name += f"_spat_{ne_dim_spat}"
+    mlp_name += f"_{loss}_{aggr}.pkl"
+    mlp = load_from_pickle(join(models_dir, mlp_name))
     print(mlp_name.upper())
+    print(f"LOSS: {loss}, REAL/SYNTHETIC: {real_synthetic}, REL DIM: {ne_dim_rel}, CONTENT DIM: {word_emb_size}, "
+          f"CONSIDER CONTENT: {consider_content}, CONSIDER_REL: {consider_rel}, EMBEDDING TYPE: {embedding}, USE AE: {use_ae}")
     test(test_df=test_df, train_df=train_df, w2v_model=w2v_model, ae_risky=dang_ae, ae_safe=safe_ae, mlp=mlp, mod_rel=mod_rel, softmax_model=softmax_model,
-         mod_spat=mod_spat, rel_net_path=path_rel, spat_net_path=path_spat, field_name_text=field_text, models_dir=models_dir,
+         mod_spat=mod_spat,use_ae=use_ae, rel_net_path=path_rel, spat_net_path=path_spat, field_name_text=field_text, models_dir=models_dir,
          field_name_id=field_id, field_name_label=field_label, consider_content=consider_content, embedding_type=embedding,
-         consider_rel=consider_rel, consider_spat=consider_spat, separator=separator, mlp_loss=loss, real_synthetic=real_synthetic)
+         consider_rel=consider_rel, consider_spat=consider_spat, separator=separator, real_synthetic=real_synthetic, aggr=aggr)
     print(f"ELAPSED TIME: {time.time()-now}")
 
 

@@ -7,7 +7,7 @@ from modelling.immense import train, train_w2v_model, get_or_create_bert_embeddi
 from os import makedirs
 from os.path import exists, join
 
-from utils import load_from_pickle
+from utils import load_from_pickle, aggregate_sonar_posts
 
 np.random.seed(123)
 
@@ -18,14 +18,16 @@ if __name__ == "__main__":
         dataset_general_params = params["dataset_general_params"]
         train_dataset_params = params["train_dataset_params"]
         model_params = params["model_params"]
+    real_synthetic = dataset_general_params["real_synthetic"]
     field_id = dataset_general_params["field_id"]
     field_text = dataset_general_params["field_text"]
     field_label = dataset_general_params["field_label"]
-    train_df = dataset_general_params["train_df"]
+    train_df = dataset_general_params["train_df"].format(real_synthetic)
     embedding = dataset_general_params["embedding"]
-    real_synthetic = dataset_general_params["real_synthetic"]
+    all_posts_with_users_path = dataset_general_params["all_posts_with_users_path"].format(real_synthetic)
+    aggr = dataset_general_params["aggr"]
 
-    path_rel = train_dataset_params["train_social_net"]
+    path_rel = train_dataset_params["train_social_net"].format(real_synthetic)
     consider_content = train_dataset_params["consider_content"]
     consider_rel = train_dataset_params["consider_rel"]
     consider_spat = train_dataset_params["consider_spat"]
@@ -34,13 +36,15 @@ if __name__ == "__main__":
 
     epochs_rel = model_params["epochs_rel"]
     mlp_batch_size = int(model_params["mlp_batch_size"])
+    softmax_lr = float(model_params["softmax_lr"])
     mlp_lr = float(model_params["mlp_lr"])
     ne_dim_rel = int(model_params["ne_dim_rel"])
     word_emb_size = int(model_params["word_emb_size"])
     w2v_epochs = int(model_params["w2v_epochs"])
     loss = model_params["loss"]
-    models_dir = model_params["dir_models"]
+    models_dir = model_params["dir_models"].format(real_synthetic)
     models_dir = os.path.join(models_dir, embedding)
+    use_ae = model_params["use_ae"]
 
     if embedding=="bert":
         word_emb_size = 768
@@ -57,18 +61,19 @@ if __name__ == "__main__":
         users_embs_dict = train_w2v_model(embedding_size=word_emb_size, epochs=w2v_epochs, id_field_name=field_id,
                                       model_dir=models_dir, text_field_name=field_text, train_df=train_df)
     elif embedding == "sonar":
-        users_embs_dict = load_from_pickle(join(models_dir, f"{real_synthetic}_aggregated.pkl"))
+        users_embs_dict = load_from_pickle(join(models_dir, f"{real_synthetic}_aggregated_{aggr}.pkl"))
         df_accounts = train_df["account_id"].unique().tolist()
         for k in list(users_embs_dict.keys()):
             if k not in df_accounts:
                 users_embs_dict.pop(k)
-        #train_df = train_df[train_df["account_id"].isin(list(users_embs_dict.keys()))]
 
-    print("CONTENT: {} REL: {} SPAT: {}".format(consider_content, consider_rel, consider_spat))
+    print(f"LOSS: {loss}, REAL/SYNTHETIC: {real_synthetic}, REL DIM: {ne_dim_rel}, CONTENT DIM: {word_emb_size}, "
+          f"CONSIDER CONTENT: {consider_content}, CONSIDER_REL: {consider_rel}, EMBEDDING TYPE: {embedding}, "
+          f"USE AE: {use_ae}, AGGREGATION: {aggr}")
     now = time.time()
     train(train_df=train_df, model_dir=models_dir, gnn_batch_size=64, field_name_id=field_id,
-          field_name_label=field_label, path_rel=path_rel, word_emb_size=word_emb_size,
+          field_name_label=field_label, path_rel=path_rel, word_emb_size=word_emb_size, real_synthetic=real_synthetic,
           ne_dim_rel=ne_dim_rel, eps_nembs_rel=epochs_rel, consider_rel=consider_rel, separator=separator,
-          consider_spat=consider_spat, embedding_type=embedding,
-          consider_content=consider_content, users_embs_dict=users_embs_dict, loss=loss, retrain=retrain)
+          consider_spat=consider_spat, embedding_type=embedding, consider_content=consider_content, aggregation=aggr,
+          users_embs_dict=users_embs_dict, loss=loss, retrain=retrain, softmax_lr=softmax_lr, use_ae=use_ae)
     print("Elapsed time: {}".format(time.time()-now))

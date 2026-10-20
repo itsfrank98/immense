@@ -45,21 +45,27 @@ def create_graph(inv_map, weighted, features, edg_dir, df, field_name_id, field_
     if edgelist is None:
         edgelist = []
         weights = []
+        c = 0
         with open(edg_dir, 'r') as f:
             for l in f.readlines():
+                c += 1
                 split = l.split(separator)
                 e1, e2 = split[0].strip(), split[1].strip()
                 if len(split) == 3:
                     e3 = split[2].strip()
                     weights.append(float(e3))
-                edgelist.append((inv_map[int(e1)], inv_map[int(e2.strip())]))
+                if int(e1) in inv_map and int(e2) in inv_map:
+                    edgelist.append((inv_map[int(e1)], inv_map[int(e2.strip())]))
+    #print(c)
+    #print(len(edgelist))
     edges = np.array(list(zip(*edgelist)))
     if len(edges.shape) == 1:
         edges = np.zeros(shape=(2, 1))
     edge_index = torch.tensor(edges, dtype=torch.long)
     if not inference:
         for k in features:
-            y.append(df[df[field_name_id] == k][field_name_label].values[0])
+            if k in df[field_name_id].unique():
+                y.append(df[df[field_name_id] == k][field_name_label].values[0])
         y = torch.tensor(np.array(y), dtype=torch.long)
     else:
         y = None

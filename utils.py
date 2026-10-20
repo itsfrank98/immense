@@ -147,3 +147,18 @@ def write_edg_file(edges, path):
     with open(path, "w") as f:
         for ed in edges:
             f.write(f"{ed[0]}\t{ed[1]}\n")
+
+def aggregate_sonar_posts(dict_of_posts_embeddings, aggr, df, account_id_field, post_id_field):
+    d = df.groupby(account_id_field)[post_id_field].apply(list).to_dict()
+    d_aggr = {}
+    for k in list(d.keys()):
+        d_aggr[k] = [dict_of_posts_embeddings[pid] for pid in d[k] if pid in dict_of_posts_embeddings]
+        d_aggr[k] = np.array(d_aggr[k])
+        if aggr == "sum":
+            d_aggr[k] = np.sum(d_aggr[k], axis=0)
+        elif aggr == "mean":
+            d_aggr[k] = np.mean(d_aggr[k], axis=0)
+    for k in list(d_aggr.keys()):
+        if type(d_aggr[k]) != np.ndarray:
+            d_aggr.pop(k)
+    return d_aggr
