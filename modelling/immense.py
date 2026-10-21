@@ -347,20 +347,15 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
                     spat_preds=x_spat, y_train=y_train, weights=weights, mlp_name=mlp_name, mlp_loss=loss)
 
 
-def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_model, consider_content, mlp_loss,
-         consider_rel, consider_spat, models_dir, bert, ae_risky=None, ae_safe=None, mod_rel=None, mod_spat=None,
-         rel_net_path=None, softmax_model=None, spat_net_path=None, separator="\t"):
-    tok = TextPreprocessing()
-    posts = tok.token_dict(df, text_field_name=field_name_text, id_field_name=field_name_id)
+def test(df, users_embeddings_dict, field_name_id, field_name_label, mlp: MLP, consider_content, consider_rel,
+         consider_spat, bert, ae_risky=None, ae_safe=None, mod_rel=None, mod_spat=None, rel_net_path=None,
+         softmax_model=None, spat_net_path=None, separator="\t"):
+
     n_of_columns = 6 if bert else 7
-    test_set = torch.zeros(len(posts), n_of_columns)
-    if bert:
-        posts_embs_dict = get_or_create_bert_embeddings(model_dir=models_dir, train_df=df, id_field_name=field_name_id,
-                                                        text_field_name=field_name_text, label_field_name=field_name_label)
-    else:
-        posts_embs_dict = w2v_model.text_to_vec(posts)
+    test_set = torch.zeros(len(df), n_of_columns)
+
     if consider_content:
-        posts_embs = torch.tensor(np.array(list(posts_embs_dict.values())), dtype=torch.float32)
+        posts_embs = torch.tensor(np.array(list(users_embeddings_dict.values())), dtype=torch.float32)
         if bert:
             logits = softmax_model(posts_embs)
             probs = torch.softmax(logits, dim=1).cpu()
@@ -381,8 +376,8 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
             test_set[:, 2] = torch.tensor(labels, dtype=torch.float32)
 
     if consider_rel:
-        mapper, inv_map_rel = create_mappers(posts_embs_dict)
-        graph = create_graph(inv_map=inv_map_rel, weighted=False, features=posts_embs_dict, edg_dir=rel_net_path, df=df,
+        mapper, inv_map_rel = create_mappers(users_embeddings_dict)
+        graph = create_graph(inv_map=inv_map_rel, weighted=False, features=users_embeddings_dict, edg_dir=rel_net_path, df=df,
                              separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
         with torch.no_grad():
             graph = graph.to(mod_rel.device)
@@ -393,8 +388,8 @@ def test(df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_mod
         test_set[:, index], test_set[:, index+1] = safe_rel_probs, risky_rel_probs
 
     if consider_spat:
-        mapper, inv_map_sp = create_mappers(posts_embs_dict)
-        graph = create_graph(inv_map=inv_map_sp, weighted=True, features=posts_embs_dict, edg_dir=spat_net_path, df=df,
+        mapper, inv_map_sp = create_mappers(users_embeddings_dict)
+        graph = create_graph(inv_map=inv_map_sp, weighted=True, features=users_embeddings_dict, edg_dir=spat_net_path, df=df,
                              separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
         with torch.no_grad():
             graph = graph.to(mod_spat.device)

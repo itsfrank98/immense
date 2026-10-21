@@ -8,7 +8,7 @@ from torch_geometric.nn import GraphConv, SAGEConv
 from tqdm import tqdm
 
 torch.manual_seed(42)
-
+VERBOSITY = False
 
 def create_mappers(features_dict):
     """
@@ -114,7 +114,7 @@ class SAGE(torch.nn.Module):
         self.train()
         total_loss = 0
 
-        for batch in tqdm(train_loader):
+        for batch in tqdm(train_loader, disable=not VERBOSITY):
             optimizer.zero_grad()
             batch = batch.to(self.device)
             out = self(batch)

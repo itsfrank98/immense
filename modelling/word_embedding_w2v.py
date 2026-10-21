@@ -46,6 +46,6 @@ class WordEmbW2V:
                     list_temp.append(np.zeros(shape=(self.embedding_size)))
             list_temp = np.array(list_temp)
             list_temp = np.sum(list_temp, axis=0)
-            d[u] = list_temp
-        #list_tot = np.asarray(list_tot)
+            if type(list_temp) == np.ndarray:
+                d[u] = list_temp
         return d

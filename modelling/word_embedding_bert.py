@@ -1,9 +1,9 @@
 import pandas as pd
 import torch
 from transformers import AutoConfig, AutoTokenizer, AutoModel
-from tqdm import tqdm   # barra di progresso utile per monitorare
+from tqdm import tqdm
 
-class WordEmb:
+class BertWordEmb:
     def __init__(self, model_name="sarkerlab/SocBERT-base", device=None):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         config = AutoConfig.from_pretrained(model_name)
@@ -12,7 +12,7 @@ class WordEmb:
         self.model.to(self.device)
         self.model.eval()
 
-    def texts_to_vec(self, texts, batch_size=16, max_length=128):
+    def texts_to_vec(self, texts, batch_size=16, max_length=512):
         """
         Calcola gli embedding per una lista di testi in batch.
         Gestisce automaticamente la memoria GPU e fallback su CPU.
@@ -36,7 +36,6 @@ class WordEmb:
                     outputs = self.model(**inputs)
                     # Media lungo la dimensione della sequenza (dim=1)
                     batch_emb = outputs.last_hidden_state.mean(dim=1).detach()
-                    # Sposta su CPU per liberare memoria GPU
                     embeddings.append(batch_emb.cpu())
                 # Libera memoria GPU ogni batch
                 torch.cuda.empty_cache()
