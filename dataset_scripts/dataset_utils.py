@@ -1,4 +1,3 @@
-import json
 import nltk
 import pandas as pd
 import re
