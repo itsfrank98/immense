@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pickle
 import seaborn as sn
+import torch
+
 from os.path import join
 from sklearn.decomposition import PCA
 from sklearn.metrics import confusion_matrix
@@ -126,3 +128,15 @@ def create_id_mapping(path_to_edgelist, dst_path):
         d[i] = el
         i += 1
     save_to_pickle(dst_path, d)
+
+def aggregate_bert_post_embeddings(users_df, posts_df, posts_embs_dict):
+    print("AGGREGATING POST EMBEDDINGS...")
+    users_embs_dict = {}
+    for user in tqdm(users_df["id"].unique()):
+        user_posts_ids = posts_df[posts_df["id"]==user]["post_id"].values
+        user_posts_embeddings = []
+        for post_id in user_posts_ids:
+            user_posts_embeddings.append(posts_embs_dict[post_id])
+        aggregated_embeddings = torch.mean(torch.stack(user_posts_embeddings), dim=0)
+        users_embs_dict[user] = aggregated_embeddings.detach()
+    return users_embs_dict
