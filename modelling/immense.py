@@ -14,53 +14,43 @@ from modelling.ae import AE
 from modelling.mlp import MLP
 from modelling.sage import create_graph, create_mappers
 from modelling.text_preprocessing import TextPreprocessing
-from modelling.word_embedding_bert import WordEmb
+from modelling.word_embedding_bert import BertWordEmb
 from modelling.word_embedding_w2v import WordEmbW2V
 from reduce_dimension import reduce_dimension
 from utils import load_from_pickle, save_to_pickle, plot_confusion_matrix
 np.random.seed(123)
 
 
-def get_or_create_bert_embeddings(model_dir, train_df, id_field_name="id", text_field_name="text_cleaned",
-                                  label_field_name="label"):
+def get_or_create_bert_post_embeddings(model_dir, posts_df, text_field_name="text_cleaned"):
     """
     Se emb_file e lbl_file esistono -> li carica e restituisce.
     Altrimenti calcola embeddings con WordEmb, li salva e restituisce.
     """
-    # raggruppa per id
-    user_text_dict = train_df.groupby(id_field_name)[text_field_name].apply(
-        lambda x: " ".join(x.astype(str).tolist())
-    ).to_dict()
-    embs_path = join(model_dir, "bert_embeddings.pt")
+    embs_path = join(model_dir, "post_bert_embeddings.pt")
+    post_ids = posts_df['post_id'].tolist()
     if exists(embs_path):
         print(f"[BERT] Loading embeddings")
-        emb_t = torch.load(embs_path)
-        embeddings = emb_t.numpy() if isinstance(emb_t, torch.Tensor) else np.array(emb_t)
+        embeddings = torch.load(embs_path, weights_only=False)
     else:
         start_emb = time.time()
         print(f"[BERT] File not found. Computing embeddings ...")
-        # pulizia minima
-        train_df = train_df.dropna(subset=[id_field_name, text_field_name, label_field_name])
-        train_df = train_df[train_df[text_field_name].str.strip() != ""]
-        if len(user_text_dict) == 0:
-            raise RuntimeError("[BERT] No text in the dataset.")
 
         # embeddings con WordEmb
-        emb_gen = WordEmb()
-        embeddings = emb_gen.texts_to_vec(list(user_text_dict.values()))
-        print(f"Embeddings learned and saved in {embs_path}. Elapsed time: {time.time() - start_emb:.1f}s")
+        emb_gen = BertWordEmb()
+        post_texts = posts_df[text_field_name].tolist()
+        print(len(post_texts))
 
-        # this is to free up some space on the gpu
-        emb_gen.model.to('cpu')
-        del emb_gen
-        torch.cuda.empty_cache()
-    ids = list(user_text_dict.keys())
-    embeddings_dict = {uid: emb for uid, emb in zip(ids, embeddings)}
+        # Compute embeddings for each post in batch
+        embeddings = emb_gen.texts_to_vec(post_texts)
+        print("TIME FOR EMBEDDING CREATION: ", time.time() - start_emb, "s")
+        torch.save(embeddings, embs_path)
 
-    # salva come torch tensors
-    torch.save(torch.tensor(embeddings), embs_path)
+    bert_embeddings = {}
+    for post_id, embedding in zip(post_ids, embeddings):
+        bert_embeddings[post_id] = embedding
 
-    return embeddings_dict
+    return bert_embeddings
+
 
 
 def train_w2v_model(embedding_size, epochs, id_field_name, model_dir, text_field_name, train_df):

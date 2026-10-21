@@ -1,10 +1,14 @@
 import time
 import numpy as np
 import pandas as pd
+import torch
 import yaml
-from modelling.immense import train, train_w2v_model, get_or_create_bert_embeddings
+from modelling.immense import train, train_w2v_model, get_or_create_bert_post_embeddings
 from os import makedirs
-from os.path import exists
+from os.path import exists, join
+from tqdm import tqdm
+
+from utils import save_to_pickle, load_from_pickle
 
 np.random.seed(123)
 
@@ -15,11 +19,14 @@ if __name__ == "__main__":
         dataset_general_params = params["dataset_general_params"]
         train_dataset_params = params["train_dataset_params"]
         model_params = params["model_params"]
+
     field_id = dataset_general_params["field_id"]
     field_text = dataset_general_params["field_text"]
     field_label = dataset_general_params["field_label"]
     train_df = dataset_general_params["train_df"]
+    posts_df_path = dataset_general_params["posts_df"]
     bert = dataset_general_params["bert"]
+
     path_rel = train_dataset_params["train_social_net"]
     path_spat = train_dataset_params["train_spatial_net"]
     consider_content = train_dataset_params["consider_content"]
@@ -49,8 +56,23 @@ if __name__ == "__main__":
         makedirs(models_dir)
     train_df = pd.read_csv(train_df)
     if bert:
-        users_embs_dict = get_or_create_bert_embeddings(train_df=train_df, model_dir=models_dir, id_field_name=field_id,
-                                        text_field_name=field_text)
+        posts_df = pd.read_csv(posts_df_path)
+        users_embs_pah = join(models_dir, "users_bert_embs_dict_avg.pkl")
+        if not exists(users_embs_pah):
+            posts_embs_dict = get_or_create_bert_post_embeddings(model_dir=models_dir, text_field_name=field_text, posts_df=posts_df)
+
+            print("AGGREGATING POST EMBEDDINGS...")
+            users_embs_dict = {}
+            for user in tqdm(train_df["id"].unique()):
+                user_posts_ids = posts_df[posts_df["id"] == user]["post_id"].values
+                user_posts_embeddings = []
+                for post_id in user_posts_ids:
+                    user_posts_embeddings.append(posts_embs_dict[post_id])
+                aggregated_embeddings = torch.mean(torch.stack(user_posts_embeddings), dim=0)
+                users_embs_dict[user] = aggregated_embeddings.detach()
+            save_to_pickle(users_embs_pah, users_embs_dict)
+        else:
+            users_embs_dict = load_from_pickle(users_embs_pah)
     else:
         users_embs_dict = train_w2v_model(embedding_size=word_emb_size, epochs=w2v_epochs, id_field_name=field_id,
                                       model_dir=models_dir, text_field_name=field_text, train_df=train_df)
