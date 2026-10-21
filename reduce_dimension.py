@@ -7,7 +7,7 @@ from torch_geometric.loader import NeighborLoader
 from modelling.sage import SAGE, create_mappers, create_graph
 from utils import save_to_pickle
 
-
+VERBOSITY = False
 def reduce_dimension(lab, model_dir, ne_dim, train_df, we_dim, batch_size, edge_path, epochs, features_dict, sizes,
                      training_weights, separator, field_name_id, field_name_label, loss, retrain=False):
     """
@@ -77,9 +77,10 @@ def reduce_dimension(lab, model_dir, ne_dim, train_df, we_dim, batch_size, edge_
             val_loss = sage.test(valid_data)
             if loss < best_loss:
                 best_loss = loss
-                print("New best model found at epoch {}. Loss: {}, val_loss: {}".format(i, loss, val_loss))
+                if VERBOSITY:
+                    print("New best model found at epoch {}. Loss: {}, val_loss: {}".format(i, loss, val_loss))
                 torch.save(sage.state_dict(), weights_path)
-            if i % 5 == 0:
+            if i % 5 == 0 and VERBOSITY:
                 print("Epoch {}: train loss {}, val loss: {}".format(i, loss, val_loss))
         sage.load_state_dict(torch.load(weights_path))
         save_to_pickle(model_path, sage)

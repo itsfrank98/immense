@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from utils import save_to_pickle
 
-
+VERBOSITY = False
 class MLP(torch.nn.Module):
     def __init__(self, X_train, y_train, model_path, loss, batch_size=64, epochs=50, weights=None, hidden_dim=3):
         super(MLP, self).__init__()
@@ -50,7 +50,7 @@ class MLP(torch.nn.Module):
             self.train()
             total_loss = 0
 
-            for batch_x, batch_y in tqdm(dl):
+            for batch_x, batch_y in tqdm(dl, disable=not VERBOSITY):
                 out = self(batch_x)
                 if self.loss == "focal":
                     t = [int(el) for el in batch_y]
@@ -63,11 +63,12 @@ class MLP(torch.nn.Module):
                 optimizer.step()
                 total_loss += loss.item()
             l = total_loss/self.batch_size
-            if epoch % 5 == 0:
+            if epoch % 5 == 0 and VERBOSITY:
                 print("\nEpoch: {}, Loss: {}".format(epoch, l))
             if l < best_loss:
                 best_loss = l
-                print("New best model found at epoch {}. Loss: {}".format(epoch, best_loss))
+                if VERBOSITY:
+                    print("New best model found at epoch {}. Loss: {}".format(epoch, best_loss))
                 save_to_pickle(self._model_path, self)
 
     def predict_proba(self, X_test):
