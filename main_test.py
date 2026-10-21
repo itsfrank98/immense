@@ -1,9 +1,11 @@
 import time
 import pandas as pd
 import yaml
-from modelling.immense import test
+
+from modelling.text_preprocessing import TextPreprocessing
+from modelling.immense import test, get_or_create_bert_post_embeddings
 from os.path import join, exists
-from utils import load_from_pickle
+from utils import load_from_pickle, aggregate_bert_post_embeddings
 
 
 def main_test():
@@ -14,12 +16,13 @@ def main_test():
         test_dataset_params = params["test_dataset_params"]
         model_params = params["model_params"]
 
-    field_id = dataset_general_params["field_id"]
-    field_text = dataset_general_params["field_text"]
+    field_name_id = dataset_general_params["field_id"]
+    field_name_text = dataset_general_params["field_text"]
     field_label = dataset_general_params["field_label"]
     bert = dataset_general_params["bert"]
 
     test_df = test_dataset_params["test_df"]
+    posts_df_path = dataset_general_params["posts_df"]
     path_rel = test_dataset_params["test_social_net"]
     path_spat = test_dataset_params["test_spatial_net"]
     consider_content = test_dataset_params["consider_content"]
@@ -36,6 +39,8 @@ def main_test():
     test_df = pd.read_csv(test_df)
     mod_rel = mod_spat = softmax_model = w2v_model = dang_ae = safe_ae = None       # depending on the configuration, some of them will stay None, others won't
 
+    posts_df = pd.read_csv(posts_df_path)
+
     if bert:
         models_dir += "/with_bert"
         word_emb_size = 768
@@ -48,12 +53,20 @@ def main_test():
         else:
             raise FileNotFoundError(f"[ERROR!] Softmax model not found in {softmax_path}")
 
+        posts_embs_dict = get_or_create_bert_post_embeddings(model_dir=models_dir, text_field_name=field_name_text,
+                                                             posts_df=posts_df)
+        users_embs_dict = aggregate_bert_post_embeddings(users_df=test_df, posts_embs_dict=posts_embs_dict,
+                                                         posts_df=posts_df)
     else:
         models_dir += "/with_w2v"
         w2v_path = join(models_dir, "w2v_{}.pkl".format(word_emb_size))
         w2v_model = load_from_pickle(w2v_path)
         dang_ae = load_from_pickle(join(models_dir, "autoencoderdang_{}.pkl".format(word_emb_size)))
         safe_ae = load_from_pickle(join(models_dir, "autoencodersafe_{}.pkl".format(word_emb_size)))
+
+        tok = TextPreprocessing()
+        posts = tok.token_dict(test_df, text_field_name=field_name_text, id_field_name=field_name_id)
+        users_embs_dict = w2v_model.text_to_vec(posts)
 
     mod_dir_rel = join(models_dir, "node_embeddings", "rel")
     mod_dir_spat = join(models_dir, "node_embeddings", "spat")
@@ -83,10 +96,11 @@ def main_test():
     mlp_name += "_{}.pkl".format(loss)
     mlp = load_from_pickle(join(models_dir, "mlp", mlp_name))
     print(mlp_name.upper())
-    test(df=test_df, w2v_model=w2v_model, ae_risky=dang_ae, ae_safe=safe_ae, mlp=mlp, mod_rel=mod_rel, softmax_model=softmax_model,
-         mod_spat=mod_spat, rel_net_path=path_rel, spat_net_path=path_spat, field_name_text=field_text, models_dir=models_dir,
-         field_name_id=field_id, field_name_label=field_label, consider_content=consider_content, bert=bert,
-         consider_rel=consider_rel, consider_spat=consider_spat, separator=separator, mlp_loss=loss)
+
+    test(df=test_df, users_embeddings_dict=users_embs_dict, ae_risky=dang_ae, ae_safe=safe_ae, mlp=mlp, mod_rel=mod_rel,
+         softmax_model=softmax_model, mod_spat=mod_spat, rel_net_path=path_rel, spat_net_path=path_spat,
+         field_name_id=field_name_id, field_name_label=field_label, consider_content=consider_content, bert=bert,
+         consider_rel=consider_rel, consider_spat=consider_spat, separator=separator)
     print(f"ELAPSED TIME: {time.time()-now}")
 
 

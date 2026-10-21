@@ -1,18 +1,14 @@
-import os
-import time
-import pickle
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 from kornia.losses import binary_focal_loss_with_logits
-from modelling.word_embedding_bert import WordEmb
+
 
 # --------------------------------------------------
 # Classe SoftmaxClassifier
 # --------------------------------------------------
+VERBOSITY = False
 class SoftmaxClassifier(nn.Module):
     def __init__(self, embedding_dim, num_classes, loss="weighted", weights=None):
         """
@@ -63,7 +59,7 @@ class SoftmaxClassifier(nn.Module):
             self.train()
             total_loss, train_correct, train_total = 0, 0, 0
 
-            for batch_x, batch_y in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
+            for batch_x, batch_y in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}", disable=not VERBOSITY):
                 batch_x, batch_y = batch_x.to(self.device), batch_y.to(self.device)
 
                 optimizer.zero_grad()
@@ -98,11 +94,12 @@ class SoftmaxClassifier(nn.Module):
                 history['val_acc'].append(val_accuracy)
                 if val_loss < best_loss:
                     best_loss = val_loss
-                    print(f"New best model found at epoch {epoch + 1}. Val Loss: {val_loss:.4f}")
+                    if VERBOSITY:
+                        print(f"New best model found at epoch {epoch + 1}. Val Loss: {val_loss:.4f}")
 
             if epoch % 5 == 0:
                 print(f"\nEpoch: {epoch + 1}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.2f}%")
-                if val_loader is not None:
+                if val_loader is not None and VERBOSITY:
                     print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")
 
         return history
@@ -166,78 +163,3 @@ class SoftmaxClassifier(nn.Module):
     def predict(self, X):
         probs = self.predict_proba(X)
         return np.argmax(probs, axis=-1)
-
-
-# --------------------------------------------------
-# MAIN: train o test
-# --------------------------------------------------
-def train_softmax_classifier(mode="train"):
-    if mode == "train":
-        dataset_path = "dataset/train.csv"
-        emb_file = "models/embeddings_train_content_relation_spatial.pt"
-        lbl_file = "models/labels_train_content_relation_spatial.pt"
-    else:
-        dataset_path = "dataset/test.csv"
-        emb_file = "models/embeddings_test_content_relation_spatial.pt"
-        lbl_file = "models/labels_test_content_relation_spatial.pt"
-
-    print(f"[SoftmaxClassifier] Mode: {mode}, usando file: {dataset_path}")
-    df = pd.read_csv(dataset_path)
-    print(f"[SoftmaxClassifier] Dataset caricato con shape: {df.shape}")
-
-    # --- Embeddings & Labels ---
-    embeddings, labels, _, _ = get_or_create_bert_embeddings(
-        emb_file=emb_file,
-        lbl_file=lbl_file,
-        dataset_path=dataset_path,
-        id_field_name="id",
-        text_field_name="text_cleaned",
-        label_field_name="label"
-    )
-
-    device = torch.device("cpu")
-
-    # --- Training ---
-    if mode == "train":
-        X_t = torch.tensor(embeddings, dtype=torch.float)
-        y_t = torch.tensor(labels, dtype=torch.long)
-        train_ds = TensorDataset(X_t, y_t)
-        train_loader = DataLoader(train_ds, batch_size=64, shuffle=True)
-
-        classifier = SoftmaxClassifier(
-            embedding_dim=X_t.shape[1],
-            num_classes=len(np.unique(labels))
-        ).to(device)
-
-        classifier.train_model(train_loader)
-
-        os.makedirs("models", exist_ok=True)
-        model_path = os.path.join("models", "softmax_model.pkl")
-        with open(model_path, "wb") as f:
-            pickle.dump(classifier, f)
-        print(f"[SoftmaxClassifier] Modello salvato in {model_path}")
-
-    # --- Testing ---
-    elif mode == "test":
-        model_path = os.path.join("models", "softmax_model.pkl")
-
-        classifier = SoftmaxClassifier(
-            embedding_dim=embeddings.shape[1],
-            num_classes=len(np.unique(labels))
-        ).to(device)
-
-        state_dict = torch.load(model_path, map_location=device)
-        classifier.load_state_dict(state_dict)
-        classifier.eval()
-
-        X_t = torch.tensor(embeddings, dtype=torch.float)
-        y_t = torch.tensor(labels, dtype=torch.long)
-        test_ds = TensorDataset(X_t, y_t)
-        test_loader = DataLoader(test_ds, batch_size=64, shuffle=False)
-
-        val_loss, val_acc, _ = classifier.test(test_loader)
-        print(f"[SoftmaxClassifier] Test -> loss: {val_loss:.4f}, acc: {val_acc:.2f}%")
-
-
-if __name__ == "__main__":
-    train_softmax_classifier(mode="train")
