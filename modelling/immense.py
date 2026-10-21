@@ -16,11 +16,11 @@ from modelling.sage import create_graph, create_mappers
 from modelling.text_preprocessing import TextPreprocessing
 from modelling.word_embedding_bert import BertWordEmb
 from modelling.word_embedding_w2v import WordEmbW2V
-from reduce_dimension import reduce_dimension
+from reduce_dimension import reduce_dimension, VERBOSITY
 from utils import load_from_pickle, save_to_pickle, plot_confusion_matrix
 np.random.seed(123)
 
-
+VERBOSITY = False
 def get_or_create_bert_post_embeddings(model_dir, posts_df, text_field_name="text_cleaned"):
     """
     Se emb_file e lbl_file esistono -> li carica e restituisce.
@@ -333,7 +333,8 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
         torch.cuda.empty_cache()
 
     mlp_name += "_{}.pkl".format(loss)
-    print("Learning MLP...\n")
+    if VERBOSITY:
+        print("Learning MLP...\n")
 
     if bert:
         mlp = model_fusion_softmax(model=model, model_dir=model_dir, y_train=y_train,

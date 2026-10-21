@@ -97,9 +97,9 @@ class SoftmaxClassifier(nn.Module):
                     if VERBOSITY:
                         print(f"New best model found at epoch {epoch + 1}. Val Loss: {val_loss:.4f}")
 
-            if epoch % 5 == 0:
+            if epoch % 5 == 0 and VERBOSITY:
                 print(f"\nEpoch: {epoch + 1}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.2f}%")
-                if val_loader is not None and VERBOSITY:
+                if val_loader is not None:
                     print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")
 
         return history
