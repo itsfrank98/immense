@@ -1,20 +1,21 @@
 dataset_general_params:
-  bert: False
-  dir_graph: "dataset/big_dataset/graph"
-  train_df: "dataset/big_dataset/train.csv"
+  bert: True
+  dir_graph: "dataset/IMMENSE_dataset/graph"
+  posts_df: "dataset/IMMENSE_dataset/cleaned_posts.csv"
+  train_df: "dataset/IMMENSE_dataset/train.csv"
   field_id: "id"
   field_text: "text_cleaned"
   field_label: "label"
 train_dataset_params:
-  train_social_net: "dataset/big_dataset/graph/social_network_train.edg"
-  train_spatial_net: "dataset/big_dataset/graph/spatial_network_train.edg"
+  train_social_net: "dataset/IMMENSE_dataset/graph/social_network_train.edg"
+  train_spatial_net: "dataset/IMMENSE_dataset/graph/spatial_network_train.edg"
   consider_content: True
   consider_rel: True
   consider_spat: True
   separator: "\t"
   retrain: False
 test_dataset_params:
-  test_df: "dataset/big_dataset/test.csv"
+  test_df: "dataset/IMMENSE_dataset/test.csv"
   test_social_net: "dataset/big_dataset/graph/social_network_test.edg"
   test_spatial_net: "dataset/big_dataset/graph/spatial_network_test.edg"
   consider_content: True
