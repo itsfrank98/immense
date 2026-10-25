@@ -1,5 +1,5 @@
 dataset_general_params:
-  bert: True
+  bert: False
   dir_graph: "dataset/IMMENSE_dataset/graph"
   posts_df: "dataset/IMMENSE_dataset/cleaned_posts.csv"
   train_df: "dataset/IMMENSE_dataset/train.csv"
@@ -26,12 +26,13 @@ test_dataset_params:
 
 model_params:
   dir_models: "dataset/big_dataset/models"
+  methodology: "random_forest"
   epochs_rel: 25
   epochs_spat: 25
   mlp_batch_size: 64
   mlp_lr: 4e-1
   ne_dim_rel: 128
   ne_dim_spat: 128
-  word_emb_size: 128
+  word_emb_size: 512
   w2v_epochs: 15
   loss: "weighted"
