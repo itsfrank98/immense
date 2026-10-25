@@ -139,12 +139,11 @@ def main_test(results_path="test_results_rf_w2v.xlsx"):
     mod_dir_rel = join(models_dir, "node_embeddings", "rel")
     mod_dir_spat = join(models_dir, "node_embeddings", "spat")
 
-    losses = ["weighted", "focal"]   #
+    losses = ["weighted", "focal"]
 
     #(True, False, False),
     confs = [(True, False, True), (True, True, False), (True, True, True), (False, False, True), (False, True, False), (False, True, True)]
-    #confs = [(True, True, False), (True, True, True), (False, False, True), (False, True, False), (False, True, True)]
-    conf_nes = [(512, 512), (256, 256), (128, 128)] #, (512, 512), (256, 256), (128, 128)
+    conf_nes = [(512, 512), (256, 256), (128, 128)]
     if bert:
         conf_nes.append((768, 768))
     co = 1

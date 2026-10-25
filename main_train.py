@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
     co = 1
     confs = [(True, False, False), (True, False, True), (True, True, False), (True, True, True), (False, False, True),
-             (False, True, False), (False, True, True)]     #
+             (False, True, False), (False, True, True)]
     losses = ["weighted", "focal"]
     conf_nes = [(512, 512), (256, 256), (128, 128)]
     if bert:
