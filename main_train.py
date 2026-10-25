@@ -46,10 +46,13 @@ if __name__ == "__main__":
     w2v_epochs = int(model_params["w2v_epochs"])
     loss = model_params["loss"]
     models_dir = model_params["dir_models"]
+    methodology = model_params["methodology"]
+
     if bert:
         models_dir += "/with_bert"
         word_emb_size = 768
     else:
+        word_emb_size = 512
         models_dir += "/with_w2v"
 
 
@@ -70,22 +73,37 @@ if __name__ == "__main__":
                                       model_dir=models_dir, text_field_name=field_text, train_df=train_df)
 
     co = 1
-    confs = [(True, False, False), (True, False, True), (True, True, False), (True, True, True), (False, False, True), (False, True, False), (False, True, True)]
-    for loss in ["weighted", "focal"]:
+    confs = [(True, False, False), (True, False, True), (True, True, False), (True, True, True), (False, False, True),
+             (False, True, False), (False, True, True)]     #
+    losses = ["weighted", "focal"]
+    conf_nes = [(512, 512), (256, 256), (128, 128)]
+    if bert:
+        conf_nes.append((768, 768))
+    for loss in losses:
         for conf in confs:
             consider_content, consider_rel, consider_spat = conf[0], conf[1], conf[2]
-            word_emb_size = 768
-            for conf_ne in [(768, 768), (512, 512), (256, 256), (128, 128)]:
+            for conf_ne in conf_nes:
+                print("\n")
+                print(f"{co}/{len(losses)*len(confs)*len(conf_nes)}")
+                print("CONTENT: {} REL: {} SPAT: {}".format(consider_content, consider_rel, consider_spat))
+
                 ne_dim_rel = conf_ne[0]
                 ne_dim_spat = conf_ne[1]
-                print("\n")
-                print(f"{co}/{len(loss)*len(conf)*len(conf_ne)}")
-                print("CONTENT: {} REL: {} SPAT: {}".format(consider_content, consider_rel, consider_spat))
                 now = time.time()
-                train(train_df=train_df, model_dir=models_dir, gnn_batch_size=64, field_name_id=field_id,
-                      field_name_label=field_label, path_rel=path_rel, path_spat=path_spat, word_emb_size=word_emb_size,
-                      ne_dim_spat=ne_dim_spat, ne_dim_rel=ne_dim_rel, eps_nembs_spat=epochs_spat, eps_nembs_rel=epochs_rel,
-                      consider_rel=consider_rel, separator=separator, consider_spat=consider_spat, bert=bert,
-                      consider_content=consider_content, users_embs_dict=users_embs_dict, loss=loss, retrain=retrain)
+                mlp_name = "mlp"
+                if consider_content:
+                    mlp_name += "_content_{}".format(word_emb_size)
+                if consider_rel:
+                    mlp_name += "_rel_{}".format(ne_dim_rel)
+                if consider_spat:
+                    mlp_name += "_spat_{}".format(ne_dim_spat)
+                mlp_name += f"_{methodology}_{loss}.pkl"
+                print(join(models_dir, "mlp", mlp_name))
+                if not exists(join(models_dir, "mlp", mlp_name)):
+                    train(train_df=train_df, model_dir=models_dir, gnn_batch_size=64, field_name_id=field_id,
+                          field_name_label=field_label, path_rel=path_rel, path_spat=path_spat, word_emb_size=word_emb_size,
+                          ne_dim_spat=ne_dim_spat, ne_dim_rel=ne_dim_rel, eps_nembs_spat=epochs_spat, eps_nembs_rel=epochs_rel,
+                          consider_rel=consider_rel, separator=separator, consider_spat=consider_spat, bert=bert, mlp_name=mlp_name,
+                          consider_content=consider_content, users_embs_dict=users_embs_dict, loss=loss, retrain=retrain)
                 print("Elapsed time: {}".format(time.time()-now))
-        co += 1
+                co += 1
