@@ -39,7 +39,7 @@ def create_graph(inv_map, weighted, features, edg_dir, df, field_name_id, field_
     feats = []
     # Create the graph
     for i in inv_mapper_list:
-        feats.append(features[int(i)])
+        feats.append(features[i])
     x = torch.Tensor(np.array(feats))
     y = []
     if edgelist is None:
@@ -54,8 +54,8 @@ def create_graph(inv_map, weighted, features, edg_dir, df, field_name_id, field_
                 if len(split) == 3:
                     e3 = split[2].strip()
                     weights.append(float(e3))
-                if int(e1) in inv_map and int(e2) in inv_map:
-                    edgelist.append((inv_map[int(e1)], inv_map[int(e2.strip())]))
+                if e1 in inv_map and e2 in inv_map:
+                    edgelist.append((inv_map[e1], inv_map[e2]))
     #print(c)
     #print(len(edgelist))
     edges = np.array(list(zip(*edgelist)))
@@ -78,7 +78,7 @@ def create_graph(inv_map, weighted, features, edg_dir, df, field_name_id, field_
 
 
 class SAGE(torch.nn.Module):
-    def __init__(self, in_dim, hidden_dim, num_layers, weighted, directed, loss):
+    def __init__(self, in_dim, hidden_dim, num_layers, weighted, directed, loss, out_channels=6):
         super(SAGE, self).__init__()
         self.device = torch.device(f'cuda' if torch.cuda.is_available() else 'cpu')
         self.convs = torch.nn.ModuleList()
@@ -86,6 +86,7 @@ class SAGE(torch.nn.Module):
         self.weighted = weighted
         self.directed = directed
         self.loss = loss
+        self.out_channels = out_channels
         if self.weighted:
             self.convs.append(GraphConv(in_dim, hidden_dim, aggr="mean"))
             for _ in range(num_layers-1):
@@ -94,7 +95,7 @@ class SAGE(torch.nn.Module):
             self.convs.append(SAGEConv(in_dim, hidden_dim, aggr="mean", normalize=True))
             for _ in range(num_layers-1):
                 self.convs.append(SAGEConv(hidden_dim, hidden_dim, aggr="mean", normalize=True))
-        self.output = SAGEConv(hidden_dim, 2, aggr="mean", normalize=True)
+        self.output = SAGEConv(hidden_dim, out_channels, aggr="mean", normalize=True)
 
     def forward(self, batch, inference=False, inference_for_embedding=False):
         x = batch.x
@@ -127,7 +128,7 @@ class SAGE(torch.nn.Module):
             if self.loss == "weighted":
                 loss = F.nll_loss(out, target=batch.y, weight=weights)
             elif self.loss == "focal":
-                target = torch.tensor(np.eye(2, dtype='uint8')[batch.y.cpu()], dtype=torch.float)
+                target = torch.tensor(np.eye(self.out_channels, dtype='uint8')[batch.y.cpu()], dtype=torch.float)
                 loss = binary_focal_loss_with_logits(out, target=target.to(self.device), reduction="mean")
             elif self.loss == "none":
                 loss = F.nll_loss(out, target=batch.y, weight=None)

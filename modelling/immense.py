@@ -6,10 +6,11 @@ from os.path import exists, join
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, mean_absolute_error, root_mean_squared_error
 from torch.nn import MSELoss
 from torch.optim import Adam
 from torch.utils.data import TensorDataset, DataLoader
+from triton.language import dtype
 
 from modelling.softmax_classifier import SoftmaxClassifier
 from modelling.ae import AE
@@ -155,7 +156,7 @@ def model_fusion(model_dir, y_train, content_embs, mlp_name, mlp_loss, mlp_lr=.0
     mlp.train_mlp(optim)
 
 
-def model_fusion_softmax(model, model_dir, y_train, content_embs, mlp_name, mlp_loss,
+def model_fusion_softmax(model, model_dir, y_train, content_embs, mlp_name, mlp_loss, out_channels,
                          mlp_lr=.004, rel_preds=None, spat_preds=None, weights=None):
     """
     Variante di model_fusion per l'uso con SoftmaxClassifier.
@@ -172,25 +173,24 @@ def model_fusion_softmax(model, model_dir, y_train, content_embs, mlp_name, mlp_
         rel_preds: predizioni del modulo relazionale (2 colonne)
         spat_preds: predizioni del modulo spaziale (2 colonne)
         weights: pesi per classi (opzionali)
+        out_channels: number of output channels for the final MLP
     """
     # 6 colonne: 2 softmax + eventuali 2 rel + eventuali 2 spat
-    n_columns = 4
+    n_columns = out_channels * 2
     print(f"N OF COLUMNS {n_columns}")
     n_rows = content_embs.shape[0]
 
     dataset = torch.zeros((n_rows, n_columns))
 
     softmax_outputs = torch.tensor(model.predict_proba(content_embs), dtype=torch.float32)
-    dataset[:, 0:2] = softmax_outputs
+    dataset[:, 0:out_channels] = softmax_outputs
 
     if rel_preds is not None:
-        dataset[:, 2:4] = torch.tensor(rel_preds[:, 0:2], dtype=torch.float32)
+        dataset[:, out_channels:2*out_channels] = torch.tensor(rel_preds[:, 0:out_channels], dtype=torch.float32)
 
-    if spat_preds is not None:
-        dataset[:, 4:6] = torch.tensor(spat_preds[:, 0:2], dtype=torch.float32)
+    # if spat_preds is not None:
+    #     dataset[:, 4:6] = torch.tensor(spat_preds[:, 0:2], dtype=torch.float32)
 
-    # Salva dataset per explainability (come l’originale)
-    save_to_pickle(f"explainability/X_train_{content_embs.shape[1]}_{mlp_loss}.pkl", dataset)
 
     # === Addestramento MLP finale ===
     mlp = MLP(
@@ -198,7 +198,8 @@ def model_fusion_softmax(model, model_dir, y_train, content_embs, mlp_name, mlp_
         y_train=y_train,
         model_path=join(model_dir, mlp_name),
         weights=weights,
-        loss=mlp_loss
+        loss=mlp_loss,
+        num_channels=out_channels
     )
     optim = Adam(mlp.parameters(), lr=mlp_lr, weight_decay=1e-4)
     mlp.train_mlp(optim)
@@ -214,9 +215,9 @@ def get_relational_preds(df, node_embs=None):
 
 
 def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, users_embs_dict, separator, loss, use_ae,
-          embedding_type, aggregation, gnn_batch_size=None, consider_content=True, consider_rel=True,
+          embedding_type, aggregation, out_channels, gnn_batch_size=None, consider_content=True, consider_rel=True,
           consider_spat=True, ne_dim_rel=None, ne_dim_spat=None, eps_nembs_rel=None, eps_nembs_spat=None, path_rel=None,
-          path_spat=None, retrain=False, softmax_lr=None, real_synthetic="real"):
+          path_spat=None, retrain=False, softmax_lr=None):
     """
     Builds and trains the independent modules that analyze content, social relationships and spatial relationships, and
     then fuses them with the MLP
@@ -266,60 +267,60 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
     mlp_name = "mlp"
     safe_ae = risky_ae = None
     posts_embs = None
-    if consider_content:
-        mlp_name += "_content_{}".format(word_emb_size)
-        if embedding_type=="w2v" or use_ae:
-            posts_embs = torch.tensor(np.array(list(users_embs_dict.values())), dtype=torch.float32)
-            safe_ae_name = join(model_dir, f"autoencodersafe_{aggregation}_{word_emb_size}.pkl")
-            risky_ae_name = join(model_dir, f"autoencoderdang_{aggregation}_{word_emb_size}.pkl")
-
-            if not exists(safe_ae_name):  # or retrain:
-                safe_ae = AE(X_train=safe_users_ar, epochs=75, batch_size=64, lr=0.002, name=safe_ae_name)
-                safe_ae.train_autoencoder_content()
-            else:
-                safe_ae = load_from_pickle(safe_ae_name)
-
-            if not exists(risky_ae_name):  # or retrain:
-                risky_ae = AE(X_train=dang_users_ar, epochs=100, batch_size=32, lr=0.002, name=risky_ae_name)
-                risky_ae.train_autoencoder_content()
-            else:
-                risky_ae = load_from_pickle(risky_ae_name)
-        else:
-            softmax_pkl_path = join(model_dir, f"softmax_model_{aggregation}_{word_emb_size}_{loss}.pkl")
-            softmax_state_path = join(model_dir, f"softmax_model_state_{aggregation}_{word_emb_size}_{loss}.pt")
-            # labels allineati agli ids
-            ids = train_df[field_name_id].tolist()
-            labels_map = train_df.drop_duplicates(field_name_id).set_index(field_name_id)[field_name_label].to_dict()
-            labels = np.array([labels_map[uid] for uid in ids])
-            y_train = torch.tensor(labels, dtype=torch.float32)
-            posts_embs = torch.tensor(np.array(list(users_embs_dict.values())), dtype=torch.float32)
-
-            if (not exists(softmax_pkl_path) and not exists(softmax_state_path)) or retrain:
-                train_ds = TensorDataset(posts_embs, y_train)
-                train_loader = DataLoader(train_ds, batch_size=64, shuffle=True)
-
-                model = SoftmaxClassifier(
-                    embedding_dim=posts_embs.shape[1],
-                    num_classes=int(len(np.unique(labels))),
-                    loss=loss,
-                    weights=weights
-                )
-
-                makedirs(model_dir, exist_ok=True)
-                model.train_model(train_loader, num_epochs=10, learning_rate=softmax_lr,
-                                  state_path=softmax_state_path, pkl_path=softmax_pkl_path)
-            else:
-                if exists(softmax_pkl_path):
-                    model = load_from_pickle(softmax_pkl_path)
-                else:
-                    model = SoftmaxClassifier(
-                        embedding_dim=posts_embs.shape[1],
-                        num_classes=int(len(np.unique(labels))),
-                        loss=loss,
-                        weights=weights
-                    )
-                    state = torch.load(softmax_state_path, map_location=torch.device("cpu"))
-                    model.load_state_dict(state)
+    # if consider_content:
+    #     mlp_name += "_content_{}".format(word_emb_size)
+    #     if embedding_type=="w2v" or use_ae:
+    #         posts_embs = torch.tensor(np.array(list(users_embs_dict.values())), dtype=torch.float32)
+    #         safe_ae_name = join(model_dir, f"autoencodersafe_{aggregation}_{word_emb_size}.pkl")
+    #         risky_ae_name = join(model_dir, f"autoencoderdang_{aggregation}_{word_emb_size}.pkl")
+    #
+    #         if not exists(safe_ae_name):  # or retrain:
+    #             safe_ae = AE(X_train=safe_users_ar, epochs=75, batch_size=64, lr=0.002, name=safe_ae_name)
+    #             safe_ae.train_autoencoder_content()
+    #         else:
+    #             safe_ae = load_from_pickle(safe_ae_name)
+    #
+    #         if not exists(risky_ae_name):  # or retrain:
+    #             risky_ae = AE(X_train=dang_users_ar, epochs=100, batch_size=32, lr=0.002, name=risky_ae_name)
+    #             risky_ae.train_autoencoder_content()
+    #         else:
+    #             risky_ae = load_from_pickle(risky_ae_name)
+    #     else:
+    #         softmax_pkl_path = join(model_dir, f"softmax_model_{aggregation}_{word_emb_size}_{loss}.pkl")
+    #         softmax_state_path = join(model_dir, f"softmax_model_state_{aggregation}_{word_emb_size}_{loss}.pt")
+    #         # labels allineati agli ids
+    #         ids = train_df[field_name_id].tolist()
+    #         labels_map = train_df.drop_duplicates(field_name_id).set_index(field_name_id)[field_name_label].to_dict()
+    #         labels = np.array([labels_map[uid] for uid in ids])
+    #         y_train = torch.tensor(labels, dtype=torch.float32)
+    #         posts_embs = torch.tensor(np.array(list(users_embs_dict.values())), dtype=torch.float32)
+    #
+    #         if (not exists(softmax_pkl_path) and not exists(softmax_state_path)) or retrain:
+    #             train_ds = TensorDataset(posts_embs, y_train)
+    #             train_loader = DataLoader(train_ds, batch_size=64, shuffle=True)
+    #
+    #             model = SoftmaxClassifier(
+    #                 embedding_dim=posts_embs.shape[1],
+    #                 num_classes=int(len(np.unique(labels))),
+    #                 loss=loss,
+    #                 weights=weights
+    #             )
+    #
+    #             makedirs(model_dir, exist_ok=True)
+    #             model.train_model(train_loader, num_epochs=10, learning_rate=softmax_lr,
+    #                               state_path=softmax_state_path, pkl_path=softmax_pkl_path)
+    #         else:
+    #             if exists(softmax_pkl_path):
+    #                 model = load_from_pickle(softmax_pkl_path)
+    #             else:
+    #                 model = SoftmaxClassifier(
+    #                     embedding_dim=posts_embs.shape[1],
+    #                     num_classes=int(len(np.unique(labels))),
+    #                     loss=loss,
+    #                     weights=weights
+    #                 )
+    #                 state = torch.load(softmax_state_path, map_location=torch.device("cpu"))
+    #                 model.load_state_dict(state)
 
     model_dir_rel = join(model_dir, "node_embeddings", "rel")
     model_dir_spat = join(model_dir, "node_embeddings", "spat")
@@ -338,38 +339,43 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
                                  train_df=train_df, epochs=eps_nembs_rel, sizes=[2, 3], loss=loss,
                                  features_dict=users_embs_dict, batch_size=gnn_batch_size, training_weights=weights,
                                  we_dim=word_emb_size, retrain=retrain, separator=separator, aggregation=aggregation,
-                                 field_name_id=field_name_id, field_name_label=field_name_label)
+                                 field_name_id=field_name_id, field_name_label=field_name_label, out_channels=out_channels)
         torch.cuda.empty_cache()
-    if consider_spat:
-        mlp_name += f"_spat_{ne_dim_rel}"
-        x_spat = reduce_dimension(model_dir=model_dir_spat, edge_path=path_spat, lab="spat", ne_dim=ne_dim_spat,
-                                  train_df=train_df, epochs=eps_nembs_spat, sizes=[3, 5],
-                                  features_dict=users_embs_dict, batch_size=gnn_batch_size, aggregation=aggregation,
-                                  training_weights=weights, we_dim=word_emb_size, retrain=retrain, separator=separator,
-                                  field_name_id=field_name_id, field_name_label=field_name_label, loss=loss)
-        torch.cuda.empty_cache()
+    # if consider_spat:
+    #     mlp_name += f"_spat_{ne_dim_rel}"
+    #     x_spat = reduce_dimension(model_dir=model_dir_spat, edge_path=path_spat, lab="spat", ne_dim=ne_dim_spat,
+    #                               train_df=train_df, epochs=eps_nembs_spat, sizes=[3, 5],
+    #                               features_dict=users_embs_dict, batch_size=gnn_batch_size, aggregation=aggregation,
+    #                               training_weights=weights, we_dim=word_emb_size, retrain=retrain, separator=separator,
+    #                               field_name_id=field_name_id, field_name_label=field_name_label, loss=loss, out_channels=out_channels)
+    #     torch.cuda.empty_cache()
 
-    mlp_name += f"_{loss}_{aggregation}.pkl"
-    print("Learning MLP...\n")
-
-    if use_ae:
-        model_fusion(ae_dang=risky_ae, ae_safe=safe_ae, content_embs=posts_embs, model_dir=model_dir, rel_preds=x_rel,
-                     spat_preds=x_spat, y_train=y_train, weights=weights, mlp_name=mlp_name, mlp_loss=loss)
-    else:
-        mlp = model_fusion_softmax(model=model, model_dir=model_dir, y_train=y_train, content_embs=posts_embs,
-                                   mlp_name=mlp_name, mlp_loss=loss, rel_preds=x_rel, spat_preds=x_spat,
-                                   weights=weights)
-        if mlp is not None:
-            save_to_pickle(join(model_dir, mlp_name), mlp)
+    # mlp_name += f"_{loss}_{aggregation}.pkl"
+    # print("Learning MLP...\n")
+    #
+    # if use_ae:
+    #     model_fusion(ae_dang=risky_ae, ae_safe=safe_ae, content_embs=posts_embs, model_dir=model_dir, rel_preds=x_rel,
+    #                  spat_preds=x_spat, y_train=y_train, weights=weights, mlp_name=mlp_name, mlp_loss=loss)
+    # else:
+    #     mlp = model_fusion_softmax(model=model, model_dir=model_dir, y_train=y_train, content_embs=posts_embs,
+    #                                mlp_name=mlp_name, mlp_loss=loss, rel_preds=x_rel, spat_preds=x_spat,
+    #                                weights=weights, out_channels=out_channels)
+    #     if mlp is not None:
+    #         save_to_pickle(join(model_dir, mlp_name), mlp)
 
 
 def test(test_df, train_df, field_name_id, field_name_text, field_name_label, mlp: MLP, w2v_model, consider_content, use_ae,
-         consider_rel, consider_spat, models_dir, real_synthetic, embedding_type, ae_risky=None, ae_safe=None, aggr="sum",
+         consider_rel, consider_spat, models_dir, real_synthetic, num_classes, embedding_type, ae_risky=None, ae_safe=None, aggr="sum",
          mod_rel=None, mod_spat=None, rel_net_path=None, softmax_model=None, spat_net_path=None, separator="\t"):
     tok = TextPreprocessing()
     posts_test = tok.token_dict(test_df, text_field_name=field_name_text, id_field_name=field_name_id)
-    n_of_columns = 5 if use_ae else 4
 
+    if use_ae:
+        n_of_columns = 1 + num_classes * 3
+    if embedding_type == "xlmt":
+        n_of_columns = num_classes * 2  # we have 6 outputs for the content analysis part and 6 for the social network. Spatial part is completely removed, not even zeroed
+    else:
+        n_of_columns = num_classes * 3
     if embedding_type == "bert":
         users_embs_dict_test = get_or_create_bert_embeddings(model_dir=models_dir, train_df=test_df, id_field_name=field_name_id,
                                                   text_field_name=field_name_text, label_field_name=field_name_label)
@@ -378,10 +384,6 @@ def test(test_df, train_df, field_name_id, field_name_text, field_name_label, ml
         full_embs_dict = w2v_model.text_to_vec(posts_train)
         users_embs_dict_test = w2v_model.text_to_vec(posts_test)
         full_embs_dict.update(users_embs_dict_test)
-        # for k in list(users_embs_dict_test.keys()):
-        #     if type(users_embs_dict_test[k]) != np.ndarray:
-        #         users_embs_dict_test.pop(k)
-
     elif embedding_type == "sonar":
         full_embs_dict = load_from_pickle(os.path.join(models_dir, f"{real_synthetic}_aggregated_{aggr}.pkl"))
         full_embs_dict = {int(k): v for k, v in full_embs_dict.items()}
@@ -391,67 +393,84 @@ def test(test_df, train_df, field_name_id, field_name_text, field_name_label, ml
             if k not in df_accounts:
                 users_embs_dict_test.pop(k)
         test_df = test_df[test_df["account_id"].isin(list(users_embs_dict_test.keys()))]
-    ids = list(users_embs_dict_test.keys())
+    elif embedding_type == "xlmt":
+        data = torch.load(join(models_dir, "test_user_embeddings.pt"))
+        ids, emb = list(data.values())
+        full_embs_dict = dict(zip(ids, emb.unbind(0)))
+    ids = list(full_embs_dict.keys())
     test_df = test_df[test_df[field_name_id].isin(ids)]
     test_set = torch.zeros(len(test_df), n_of_columns)
 
-    if consider_content:
-        posts_embs = torch.tensor(np.array(list(users_embs_dict_test.values())), dtype=torch.float32)
-        if use_ae:
-            pred_safe = ae_safe.predict(posts_embs)
-            pred_risky = ae_risky.predict(posts_embs)
-            loss = MSELoss()
-            pred_loss_safe = []
-            pred_loss_risky = []
-            for i in range(posts_embs.shape[0]):
-                pred_loss_safe.append(loss(posts_embs[i], pred_safe[i]))
-                pred_loss_risky.append(loss(posts_embs[i], pred_risky[i]))
-
-            labels = [0 if i < j else 1 for i, j in zip(pred_loss_safe, pred_loss_risky)]
-            test_set[:, 0] = torch.tensor(pred_loss_safe, dtype=torch.float32)
-            test_set[:, 1] = torch.tensor(pred_loss_risky, dtype=torch.float32)
-            test_set[:, 2] = torch.tensor(labels, dtype=torch.float32)
-        else:
-            content_probs = softmax_model.predict_proba(posts_embs)
-            test_set[:, 0:2] = torch.Tensor(content_probs)
-            #logits = softmax_model(posts_embs)
-            #content_probs = torch.softmax(logits, dim=1).cpu()
-            # test_set[:, 0:2] = content_probs
+    # if consider_content:
+    #     posts_embs = torch.tensor(np.array(list(full_embs_dict.values())), dtype=torch.float32)
+    #     if use_ae:
+    #         pred_safe = ae_safe.predict(posts_embs)
+    #         pred_risky = ae_risky.predict(posts_embs)
+    #         loss = MSELoss()
+    #         pred_loss_safe = []
+    #         pred_loss_risky = []
+    #         for i in range(posts_embs.shape[0]):
+    #             pred_loss_safe.append(loss(posts_embs[i], pred_safe[i]))
+    #             pred_loss_risky.append(loss(posts_embs[i], pred_risky[i]))
+    #
+    #         labels = [0 if i < j else 1 for i, j in zip(pred_loss_safe, pred_loss_risky)]
+    #         test_set[:, 0] = torch.tensor(pred_loss_safe, dtype=torch.float32)
+    #         test_set[:, 1] = torch.tensor(pred_loss_risky, dtype=torch.float32)
+    #         test_set[:, 2] = torch.tensor(labels, dtype=torch.float32)
+    #     else:
+    #         content_probs = softmax_model.predict_proba(posts_embs)
+    #         test_set[:, 0:num_classes] = torch.Tensor(content_probs)
+    #         logits = softmax_model(posts_embs)
+    #         content_probs = torch.softmax(logits, dim=1).cpu()
+    #         test_set[:, 0:2] = content_probs
 
     if consider_rel:
         mapper, inv_map_rel = create_mappers(full_embs_dict)
-        graph = create_graph(inv_map=inv_map_rel, weighted=False, features=full_embs_dict, edg_dir=rel_net_path, df=pd.concat([test_df, train_df]).drop_duplicates(subset=field_name_id),
+        graph = create_graph(inv_map=inv_map_rel, weighted=False, features=full_embs_dict, edg_dir=rel_net_path,
+                             df=pd.concat([test_df, train_df]).drop_duplicates(subset=field_name_id),
                              separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
         with torch.no_grad():
             graph = graph.to(mod_rel.device)
-            rel_preds_whole_graph = mod_rel(graph, inference=True).cpu().detach().numpy()
+            rel_preds_whole_graph = mod_rel(graph, inference=True).cpu()
         test_ids = test_df["account_id"].unique().tolist()
         test_rows = [inv_map_rel[uid] for uid in test_ids]
         rel_preds = rel_preds_whole_graph[test_rows]
-        safe_rel_probs = torch.tensor(rel_preds[:, 0], dtype=torch.float32)
-        risky_rel_probs = torch.tensor(rel_preds[:, 1], dtype=torch.float32)
-        index = 3 if use_ae else 2
-        test_set[:, index], test_set[:, index+1] = safe_rel_probs, risky_rel_probs
+        #rel_preds = torch.from_numpy(rel_preds, type=torch.float32)
+        if embedding_type != "xlmt":
+            safe_rel_probs = rel_preds[:, 0]
+            risky_rel_probs = rel_preds[:, 1]
+            index = 3 if use_ae else 2
+            test_set[:, index], test_set[:, index+1] = safe_rel_probs, risky_rel_probs
+        else:
+            test_set[:, num_classes:n_of_columns] = rel_preds
 
-    if consider_spat:
-        mapper, inv_map_sp = create_mappers(users_embs_dict_test)
-        graph = create_graph(inv_map=inv_map_sp, weighted=True, features=users_embs_dict_test, edg_dir=spat_net_path, df=test_df,
-                             separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
-        with torch.no_grad():
-            graph = graph.to(mod_spat.device)
-            spat_preds = mod_spat(graph, inference=False).cpu().detach().numpy()
-        safe_spat_probs = torch.tensor(spat_preds[:, 0], dtype=torch.float32)
-        risky_spat_probs = torch.tensor(spat_preds[:, 1], dtype=torch.float32)
-        index = 4 if embedding_type else 5
-        test_set[:, index], test_set[:, index+1] = safe_spat_probs, risky_spat_probs
+    # if consider_spat:
+    #     mapper, inv_map_sp = create_mappers(users_embs_dict_test)
+    #     graph = create_graph(inv_map=inv_map_sp, weighted=True, features=users_embs_dict_test, edg_dir=spat_net_path, df=test_df,
+    #                          separator=separator, field_name_id=field_name_id, field_name_label=field_name_label)
+    #     with torch.no_grad():
+    #         graph = graph.to(mod_spat.device)
+    #         spat_preds = mod_spat(graph, inference=False).cpu().detach().numpy()
+    #     safe_spat_probs = torch.tensor(spat_preds[:, 0], dtype=torch.float32)
+    #     risky_spat_probs = torch.tensor(spat_preds[:, 1], dtype=torch.float32)
+    #     index = 4 if embedding_type else 5
+    #     test_set[:, index], test_set[:, index+1] = safe_spat_probs, risky_spat_probs
 
-    pred = mlp.test(test_set)
+    #pred = mlp.test(test_set)
+    pred = rel_preds.argmax(dim=1)
     ts = test_set.detach().numpy()
     y_true = np.array(test_df[field_name_label])
 
-    plot_confusion_matrix(y_true=y_true, y_pred=pred)
-    print(classification_report(y_true=y_true, y_pred=pred))
+    report = classification_report(y_true=y_true, y_pred=pred, output_dict=True, zero_division=0)
+    print(report)
 
+    binary_pred = [0 if p<3 else 1 for p in pred]
+    y_true_pred = [0 if p<3 else 1 for p in y_true]
+    binary_report = classification_report(y_true=y_true_pred, y_pred=binary_pred, output_dict=True, zero_division=0)
+    mae = mean_absolute_error(y_true=y_true, y_pred=pred)
+    rmse = root_mean_squared_error(y_true=y_true, y_pred=pred)
+    print(binary_report)
+    """
     pred_rel = np.argmax(rel_preds, 1)
     print("RELATIONAL")
     print(classification_report(y_true=y_true, y_pred=pred_rel))
@@ -461,3 +480,4 @@ def test(test_df, train_df, field_name_id, field_name_text, field_name_label, ml
     pred_con = np.argmax(content_probs, 1)
     print(classification_report(y_true=y_true, y_pred=pred_con))
     #"""
+    return report, binary_report, mae, rmse

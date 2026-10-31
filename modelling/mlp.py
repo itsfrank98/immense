@@ -13,7 +13,7 @@ from utils import save_to_pickle
 
 
 class MLP(torch.nn.Module):
-    def __init__(self, X_train, y_train, model_path, loss, batch_size=64, epochs=50, weights=None, hidden_dim=3):
+    def __init__(self, X_train, y_train, model_path, loss, num_channels, batch_size=64, epochs=50, weights=None, hidden_dim=3):
         super(MLP, self).__init__()
         self.X_train = X_train
         self.weights = weights
@@ -22,15 +22,14 @@ class MLP(torch.nn.Module):
         self.batch_size = batch_size
         self.epochs = epochs
         self.loss = loss
+        self.num_channels = num_channels
 
         input_dim = X_train.shape[1]
-        num_classes = len(torch.unique(self.y_train.long()))  # numero di classi dinamico
 
-        print(f"[MLP init] input_dim={input_dim}, hidden_dim={hidden_dim}, num_classes={num_classes}")
+        print(f"[MLP init] input_dim={input_dim}, hidden_dim={hidden_dim}, num_classes={num_channels}")
 
-        # definizione rete
         self.input = Linear(in_features=input_dim, out_features=hidden_dim)
-        self.output = Linear(in_features=hidden_dim, out_features=num_classes)
+        self.output = Linear(in_features=hidden_dim, out_features=num_channels)
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         if self.weights is not None:
@@ -60,7 +59,7 @@ class MLP(torch.nn.Module):
                 out = self(batch_x)
                 if self.loss == "focal":
                     t = [int(el) for el in batch_y]
-                    target = torch.tensor(np.eye(2, dtype='uint8')[t], dtype=torch.float).to(self.device)
+                    target = torch.tensor(np.eye(self.num_channels, dtype='uint8')[t], dtype=torch.float).to(self.device)
                     loss = binary_focal_loss_with_logits(out, target=target, reduction="mean")
                 elif self.loss == "weighted":
                     loss = nll_loss(out, batch_y.long(), weight=self.weights)

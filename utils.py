@@ -7,6 +7,8 @@ from os.path import join
 from sklearn.decomposition import PCA
 from sklearn.metrics import confusion_matrix
 from tqdm import tqdm
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, Side
 
 
 def save_to_pickle(name, c):
@@ -162,3 +164,80 @@ def aggregate_sonar_posts(dict_of_posts_embeddings, aggr, df, account_id_field, 
         if type(d_aggr[k]) != np.ndarray:
             d_aggr.pop(k)
     return d_aggr
+
+
+def _save_classification_report_summaries(reports: dict, output_path: str, title: str, error_metrics: dict = None) -> None:
+    """Save one summary per sheet, with each metric in a mean ± std cell.
+
+    error_metrics maps sheet names to optional MAE/RMSE summaries. Values are
+    presentation strings (two decimals), matching the logged report.
+    """
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    side = Side(style="thin", color="000000")
+    thin_border = Border(left=side, right=side, top=side, bottom=side)
+
+    def format_metric(stats):
+        return f"{stats['mean']:.2f} ± {stats['std']:.2f}"
+
+    for sheet_name, summary in reports.items():
+        sheet = workbook.create_sheet(sheet_name)
+        sheet.append([title])
+        sheet.merge_cells("A1:E1")
+        sheet.append(["Class", "Precision", "Recall", "F1", "accuracy"])
+        for label, metrics in summary.items():
+            if label == "accuracy":
+                continue
+            sheet.append([label] + [
+                format_metric(metrics[metric])
+                for metric in ("precision", "recall", "f1-score")
+            ])
+
+        last_report_row = sheet.max_row
+        if "accuracy" in summary:
+            sheet.cell(3, 5, format_metric(summary["accuracy"]))
+            if last_report_row > 3:
+                sheet.merge_cells(start_row=3, start_column=5,
+                                  end_row=last_report_row, end_column=5)
+
+        for metric, stats in (error_metrics or {}).get(sheet_name, {}).items():
+            sheet.append([metric, format_metric(stats)])
+            sheet.merge_cells(start_row=sheet.max_row, start_column=2,
+                              end_row=sheet.max_row, end_column=5)
+
+        for row in sheet.iter_rows():
+            for cell in row:
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+                cell.border = thin_border
+                if cell.row <= 2 or cell.column == 1:
+                    cell.font = Font(bold=True)
+            sheet.row_dimensions[row[0].row].height = 22
+        for column in "ABCDE":
+            sheet.column_dimensions[column].width = 20
+        sheet.freeze_panes = "B3"
+
+    workbook.save(output_path)
+
+def _average_classification_reports(fold_reports: list) -> dict:
+    """Averages sklearn classification_report(output_dict=True) dicts across folds.
+
+    Every fold's report must cover the same set of row keys (pass
+    labels=np.arange(NUM_LABELS) to classification_report so folds where a class has
+    zero support still get a row - otherwise per-class rows would go missing/misaligned
+    across folds and this would KeyError).
+    """
+    summary = {}
+    for key, value in fold_reports[0].items():
+        if isinstance(value, dict):
+            summary[key] = {
+                metric: {
+                    "mean": float(np.mean([r[key][metric] for r in fold_reports])),
+                    "std": float(np.std([r[key][metric] for r in fold_reports], ddof=1)),
+                }
+                for metric in value
+            }
+        else:  # "accuracy" is a bare float, not a nested dict
+            values = np.array([r[key] for r in fold_reports])
+            summary[key] = {"mean": float(values.mean()), "std": float(values.std())}
+    return summary
+
