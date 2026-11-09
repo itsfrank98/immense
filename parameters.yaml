@@ -1,11 +1,12 @@
 dataset_general_params:
   real_synthetic: "r"
-  embedding: "xlmt"
-  train_df: "dataset/GAB_dataset/{}/train.tsv"
-  all_posts_with_users_path: "dataset/GAB_dataset/{}_posts.tsv"
-  aggr: "already"
+  embedding: "bert"
+  train_df: "dataset/GAB_dataset/real_users.tsv"
+  all_posts_with_users_path: "dataset/GAB_dataset/real_posts_capped_64.tsv"
+  aggr: "average"   # means that they are already aggregated
   field_id: "account_id"
-  field_text: "posts"
+  field_post_id: "id"
+  field_text: "content"
   field_label: "label"
 
 train_dataset_params:
@@ -25,7 +26,7 @@ test_dataset_params:
   separator: "\t"
 
 model_params:
-  out_channels: 6   # AGGIUNGERE AL CODICE
+  out_channels: 6   # Number of classes to predict
   dir_models: "dataset/GAB_dataset/models_{}"
   epochs_rel: 30
   epochs_spat: 25

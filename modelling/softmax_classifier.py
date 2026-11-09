@@ -1,5 +1,4 @@
 import os
-import time
 import pickle
 import numpy as np
 import pandas as pd
@@ -8,11 +7,12 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 from tqdm import tqdm
 from kornia.losses import binary_focal_loss_with_logits
-from modelling.word_embedding_bert import WordEmb
 
 # --------------------------------------------------
 # Classe SoftmaxClassifier
 # --------------------------------------------------
+VERBOSITY = False
+
 class SoftmaxClassifier(nn.Module):
     def __init__(self, embedding_dim, num_classes, loss="weighted", weights=None):
         """
@@ -66,8 +66,10 @@ class SoftmaxClassifier(nn.Module):
             with open(pkl_path, "wb") as f:
                 pickle.dump(self, f)
 
-    def train_model(self, train_loader, val_loader=None, optimizer=None, num_epochs=50, learning_rate=0.0001,
-                    state_path=None, pkl_path=None):
+    def train_model(self, train_loader, val_loader=None, optimizer=None, num_epochs=50, learning_rate=0.001):
+        """
+        Ciclo di training del classificatore softmax.
+        """
         device = self.device
         if optimizer is None:
             optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
@@ -82,7 +84,7 @@ class SoftmaxClassifier(nn.Module):
             self.train()
             total_loss, train_correct, train_total = 0, 0, 0
 
-            for batch_x, batch_y in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}"):
+            for batch_x, batch_y in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}", disable=not VERBOSITY):
                 batch_x, batch_y = batch_x.to(self.device), batch_y.to(self.device)
 
                 optimizer.zero_grad()
@@ -115,17 +117,12 @@ class SoftmaxClassifier(nn.Module):
                 val_loss, val_accuracy, _ = self.test(val_loader)
                 history['val_loss'].append(val_loss)
                 history['val_acc'].append(val_accuracy)
-                monitored_loss = val_loss
-            else:
-                monitored_loss = avg_train_loss
+                if val_loss < best_loss:
+                    best_loss = val_loss
+                    if VERBOSITY:
+                        print(f"New best model found at epoch {epoch + 1}. Val Loss: {val_loss:.4f}")
 
-            if monitored_loss < best_loss:
-                best_loss = monitored_loss
-                metric_name = "Val Loss" if val_loader is not None else "Train Loss"
-                print(f"New best model found at epoch {epoch + 1}. {metric_name}: {monitored_loss:.4f}")
-                self.save_checkpoint(state_path=state_path, pkl_path=pkl_path)
-
-            if epoch % 5 == 0:
+            if epoch % 5 == 0 and VERBOSITY:
                 print(f"\nEpoch: {epoch + 1}, Train Loss: {avg_train_loss:.4f}, Train Acc: {train_accuracy:.2f}%")
                 if val_loader is not None:
                     print(f"Val Loss: {val_loss:.4f}, Val Acc: {val_accuracy:.2f}%")

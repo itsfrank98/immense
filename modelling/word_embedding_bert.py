@@ -3,7 +3,7 @@ import torch
 from transformers import AutoConfig, AutoTokenizer, AutoModel
 from tqdm import tqdm   # barra di progresso utile per monitorare
 
-class WordEmb:
+class BertWordEmb:
     def __init__(self, model_name="sarkerlab/SocBERT-base", device=None):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         config = AutoConfig.from_pretrained(model_name)
