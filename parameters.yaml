@@ -37,5 +37,5 @@ model_params:
   ne_dim_spat: 128
   word_emb_size: 256
   w2v_epochs: 15
-  loss: "focal"
+  loss: "weighted"
   use_ae: False

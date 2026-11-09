@@ -35,8 +35,7 @@ def main_test():
     use_ae = model_params["use_ae"]
     n_classes = model_params["out_channels"]
 
-    percs = [2, 4, 8, 16, 32, 64, 75]
-    percs = [1]
+    percs = [2, 4, 8, 16, 32, 64, 75]       # percentage splits
     posts_df = pd.read_csv(all_posts_df_path, sep="\t")
     for p in percs:
         src = f"dataset/GAB_dataset/percented_train_{real_synthetic}/{p}_perc/cross_validation/"

@@ -66,8 +66,7 @@ if __name__ == "__main__":
         else:
             all_users_embs_dict = load_from_pickle(users_embs_path)
 
-    percs = [1, 2, 4, 8, 16, 32, 64, 75]
-    percs = [1]
+    percs = [2, 4, 8, 16, 32, 64, 75]
 
     for p in percs:
         src = os.path.join(models_dir, f"{p}_perc/cross_validation/")

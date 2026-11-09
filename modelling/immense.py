@@ -162,7 +162,6 @@ def model_fusion_softmax(model, model_dir, y_train, content_embs, mlp_name, mlp_
         weights: pesi per classi (opzionali)
         out_channels: number of output channels for the final MLP
     """
-    # 4 colonne: 2 softmax +  2 rel
     n_columns = out_channels * 2
     print(f"N OF COLUMNS {n_columns}")
     n_rows = content_embs.shape[0]
@@ -228,13 +227,13 @@ def train(field_name_id, field_name_label, model_dir, train_df, word_emb_size, u
 
     weights = None
     if loss == "weighted":
-        nz = len(train_df[train_df[field_name_label] == 1])
-        if nz == 0:
-            raise RuntimeError("Nessun esempio della classe positiva trovato nel train_df.")
-        pos_weight = len(train_df) / nz
-        neg_weight = len(train_df) / (len(train_df) - nz)
-        #neg_weight = len(train_df) / (2 * (len(train_df) - nz))
-        weights = torch.tensor([neg_weight, pos_weight])
+        weights = torch.zeros(out_channels, dtype=torch.float32)
+        for v in np.arange(out_channels):
+            nv = len(train_df[train_df[field_name_label] == v])
+            if nv == 0:
+                raise RuntimeError(f"Nessun esempio della classe {nv} trovato nel train_df.")
+            weight = len(train_df) / nv
+            weights[v] = weight
         weights = weights.to(device)
 
     mlp_name = "mlp"
@@ -396,13 +395,7 @@ def test(test_df, train_df, field_name_id, field_name_text, field_name_label, fu
         test_rows = [inv_map_rel[uid] for uid in test_ids]
         rel_preds = rel_preds_whole_graph[test_rows]
         #rel_preds = torch.from_numpy(rel_preds, type=torch.float32)
-        if embedding_type != "xlmt":
-            safe_rel_probs = rel_preds[:, 0]
-            risky_rel_probs = rel_preds[:, 1]
-            index = 3 if use_ae else 2
-            test_set[:, index], test_set[:, index+1] = safe_rel_probs, risky_rel_probs
-        else:
-            test_set[:, num_classes:n_of_columns] = rel_preds
+        test_set[:, num_classes:2*num_classes] = rel_preds
 
     #pred = rel_preds.argmax(dim=1)
     pred = mlp.test(test_set)
