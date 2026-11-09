@@ -5,7 +5,6 @@ import pandas as pd
 import yaml
 import torch
 from modelling.immense import train
-from os import makedirs
 from os.path import exists, join
 from utils import load_from_pickle, save_to_pickle, aggregate_bert_post_embeddings
 from modelling.immense import get_or_create_bert_post_embeddings
