@@ -6,7 +6,7 @@ import yaml
 from modelling.immense import train, train_w2v_model, get_or_create_bert_embeddings
 from os import makedirs
 from os.path import exists, join
-
+import torch
 from utils import load_from_pickle, aggregate_sonar_posts
 
 np.random.seed(123)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     models_dir = os.path.join(models_dir, embedding)
     use_ae = model_params["use_ae"]
 
-    if embedding=="bert":
+    if embedding=="bert" or "xlmt":
         word_emb_size = 768
     elif embedding=="sonar":
         word_emb_size = 1024
@@ -66,6 +66,11 @@ if __name__ == "__main__":
         for k in list(users_embs_dict.keys()):
             if k not in df_accounts:
                 users_embs_dict.pop(k)
+    elif embedding == "xlmt":
+        data = torch.load(join(""))
+        ids, emb = list(data.values())
+        users_embs_dict = dict(zip(ids, emb.unbind(0)))
+
 
     print(f"LOSS: {loss}, REAL/SYNTHETIC: {real_synthetic}, REL DIM: {ne_dim_rel}, CONTENT DIM: {word_emb_size}, "
           f"CONSIDER CONTENT: {consider_content}, CONSIDER_REL: {consider_rel}, EMBEDDING TYPE: {embedding}, "
