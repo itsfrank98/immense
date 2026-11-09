@@ -7,7 +7,6 @@ from utils import load_from_pickle, read_df, _average_classification_reports, _s
 import numpy as np
 
 def main_test():
-    now = time.time()
     with open("parameters.yaml", 'r') as params_file:
         params = yaml.safe_load(params_file)
         dataset_general_params = params["dataset_general_params"]
@@ -34,7 +33,6 @@ def main_test():
     path_spat = None
 
     percs = [2, 4, 8, 16, 32, 64, 75]
-    percs= [1]
     for p in percs:
         src = f"dataset/GAB_dataset/percented_train_{real_synthetic}/{p}_perc/cross_validation/"
         reports, binary_reports, maes, rmses = [], [], [], []
