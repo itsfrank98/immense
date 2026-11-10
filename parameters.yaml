@@ -3,7 +3,7 @@ dataset_general_params:
   embedding: "bert"
   train_df: "dataset/GAB_dataset/real_users.tsv"
   all_posts_with_users_path: "dataset/GAB_dataset/real_and_synthetic_posts.tsv"
-  aggr: "average"   # means that they are already aggregated
+  aggr: "average"   # if value is "already" it means that they are already aggregated
   field_id: "account_id"
   field_post_id: "id"
   field_text: "content"
