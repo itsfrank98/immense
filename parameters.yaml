@@ -1,8 +1,8 @@
 dataset_general_params:
-  real_synthetic: "r"
+  real_synthetic: "rs"
   embedding: "bert"
   train_df: "dataset/GAB_dataset/real_users.tsv"
-  all_posts_with_users_path: "dataset/GAB_dataset/real_posts_capped_64.tsv"
+  all_posts_with_users_path: "dataset/GAB_dataset/real_and_synthetic_posts.tsv"
   aggr: "average"   # means that they are already aggregated
   field_id: "account_id"
   field_post_id: "id"
@@ -13,7 +13,6 @@ train_dataset_params:
   train_social_net: "dataset/GAB_dataset/{}/train_network.edg"
   consider_content: True
   consider_rel: True
-  consider_spat: False
   separator: "\t"
   retrain: True
 
@@ -21,20 +20,17 @@ test_dataset_params:
   test_df: "dataset/GAB_dataset/{}/test.tsv"
   full_social_net: "dataset/GAB_dataset/{}/social_network_{}.edg"
   consider_content: True
-  consider_rel: True
-  consider_spat: False
+  consider_rel:
   separator: "\t"
 
 model_params:
   out_channels: 6   # Number of classes to predict
   dir_models: "dataset/GAB_dataset/models_{}"
   epochs_rel: 30
-  epochs_spat: 25
   mlp_batch_size: 64
   mlp_lr: 2e-4
   softmax_lr: 4e-4
   ne_dim_rel: 768
-  ne_dim_spat: 128
   word_emb_size: 256
   w2v_epochs: 15
   loss: "weighted"
