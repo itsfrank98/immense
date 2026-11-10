@@ -20,7 +20,7 @@ test_dataset_params:
   test_df: "dataset/GAB_dataset/{}/test.tsv"
   full_social_net: "dataset/GAB_dataset/{}/social_network_{}.edg"
   consider_content: True
-  consider_rel:
+  consider_rel: True
   separator: "\t"
 
 model_params:
